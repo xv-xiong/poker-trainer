@@ -248,6 +248,8 @@ export function applyAction(
     thinkMs,
     potAtAction: potBefore,
     toCall,
+    // 记录决策时点的剩余筹码（commit 之前已扣除，故加回本次投入）
+    stackAtAction: seat.stack + actualAmount,
   });
 
   advance(state);

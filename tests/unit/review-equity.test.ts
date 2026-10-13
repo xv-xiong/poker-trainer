@@ -15,6 +15,8 @@ import { parseCards } from '../../src/core/cards.js';
 import { computeEquity } from '../../src/core/equity/index.js';
 import { createRng } from '../../src/core/rng.js';
 import { rank7, categoryOf } from '../../src/core/rank7.js';
+import { GameController } from '../../src/ui/controller.js';
+import { createMemoryStorage } from '../../src/store/persistence.js';
 
 describe('胜率量级与牌力一致', () => {
   it('两对在「配对 + 三张同花」的多人池里胜率低是正确行为（不是缺陷）', () => {
@@ -91,6 +93,66 @@ describe('胜率量级与牌力一致', () => {
       rng: createRng(7),
     }).equity;
     expect(strong - weak).toBeGreaterThan(0.3);
+  });
+});
+
+describe('复盘必须使用决策时点的数据（不是终局数据）', () => {
+  it('动作记录包含决策时点的剩余筹码，且等于投入前的真实筹码', () => {
+    const c = new GameController({ storage: createMemoryStorage(), heroSeat: 0 });
+    c.startHand();
+    c.runAI();
+    let guard = 0;
+    while (!c.currentState()!.finished && guard++ < 400) {
+      const s = c.snapshot();
+      if (s.heroTurn) {
+        const legal = s.legal!;
+        const before = c.currentState()!.seats[c.heroSeat].stack;
+        if (legal.canCall) c.act('call', 0, 10);
+        else if (legal.canCheck) c.act('check', 0, 10);
+        else c.act('fold', 0, 10);
+        const last = c.currentState()!.actions.filter((a) => a.seat === c.heroSeat).pop();
+        if (last) {
+          // stackAtAction = 投入前的筹码；投入后剩余 = 投入前 - amount
+          expect(last.stackAtAction).toBe(before);
+        }
+      } else {
+        c.runAI();
+      }
+    }
+  });
+
+  it('回归：全下输光后，建议加注额不应坍缩为 0（曾用终局筹码计算导致偏小）', () => {
+    const c = new GameController({ storage: createMemoryStorage(), heroSeat: 0 });
+    // 连打若干手，收集所有复盘条目
+    const entries: { actualAmount: number; bestAmount: number; bestAction: string }[] = [];
+    for (let h = 0; h < 8; h++) {
+      c.startHand();
+      c.runAI();
+      let guard = 0;
+      while (!c.currentState()!.finished && guard++ < 400) {
+        const s = c.snapshot();
+        if (s.heroTurn) {
+          const legal = s.legal!;
+          // 故意多跟注，制造打到全下的局面
+          if (legal.canCall) c.act('call', 0, 5);
+          else if (legal.canCheck) c.act('check', 0, 5);
+          else c.act('fold', 0, 5);
+        } else {
+          c.runAI();
+        }
+      }
+      for (const e of c.snapshot().lastReview) {
+        entries.push({ actualAmount: e.actualAmount, bestAmount: e.bestAmount, bestAction: e.bestAction });
+      }
+    }
+    expect(entries.length).toBeGreaterThan(5);
+    // 建议加注额必须为正（不能因为终局筹码为 0 而算出 0）
+    const raiseSuggestions = entries.filter((e) => e.bestAction === 'raise');
+    if (raiseSuggestions.length > 0) {
+      for (const e of raiseSuggestions) {
+        expect(e.bestAmount).toBeGreaterThan(0);
+      }
+    }
   });
 });
 

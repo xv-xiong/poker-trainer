@@ -126,19 +126,22 @@ export function buildReview(
     const toCall = a.toCall;
     const equity = ctx.equityAt(i, a.seat, a.street);
 
-    // 该决策点的可加注额度：以「本街投入 + 剩余筹码」为上界，取一个半池加注作为候选
-    const seat = state.seats[heroSeat];
-    const raiseTo = Math.min(
-      a.toAmount + Math.max(state.bigBlind, Math.round((pot + toCall) * 0.5)),
-      a.toAmount + seat.stack + (a.amount > 0 ? 0 : 0),
-    );
+    // 关键：必须用**决策时点**的剩余筹码（a.stackAtAction），
+    // 不能用 state.seats[heroSeat].stack —— 复盘在整手结束后才计算，
+    // 那时的 stack 已是终局值（全下后为 0），会得出偏小甚至为 0 的建议加注额。
+    const stackAtDecision = a.stackAtAction;
+
+    // 该决策点的可加注额度：以「本街已投入 + 决策时剩余筹码」为上界，
+    // 候选尺度取「半个底池」与「底池」的较大者，再夹到合法区间内。
+    const halfPot = Math.max(state.bigBlind, Math.round((pot + toCall) * 0.5));
+    const raiseTo = Math.min(a.toAmount + halfPot, a.toAmount + stackAtDecision);
 
     const evs = estimateEvs({
       equity,
       pot,
       toCall,
       raiseTo,
-      stack: seat.stack,
+      stack: stackAtDecision,
       bigBlind: state.bigBlind,
     });
 

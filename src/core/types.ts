@@ -74,6 +74,15 @@ export interface ActionRecord {
   readonly potAtAction: number;
   /** 动作时还需跟注的额度。 */
   readonly toCall: number;
+  /**
+   * 动作发生时该座位的剩余筹码。
+   *
+   * 为什么必须记录：复盘是在**整手结束后**才计算的，此时 seats[].stack 已是
+   * 终局筹码（可能为 0）。若复盘用终局筹码去推算「建议加注额」，会得出
+   * 明显偏小甚至为 0 的建议（例如全下输光后建议「加注 20」）。
+   * 该缺陷由交付前检查线上复盘输出发现，因此把决策时点的筹码固化进记录。
+   */
+  readonly stackAtAction: number;
 }
 
 /** 一个边池层。 */
