@@ -80,7 +80,7 @@ export function ReviewPanel({
           <span>你的底牌</span>
           <span className="hint">与公共牌</span>
         </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="card-group">
           <CardRow cards={hole} small />
           <span className="muted small">+</span>
           <CardRow cards={record.board} small placeholderCount={5} />
@@ -95,7 +95,9 @@ export function ReviewPanel({
               7 选 5 的最强组合 · {categoryName.zh}（{categoryName.en}）
             </span>
           </div>
-          <CardRow cards={best} small />
+          <div className="card-group">
+            <CardRow cards={best} small />
+          </div>
         </div>
       )}
 

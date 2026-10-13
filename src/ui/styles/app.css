@@ -792,6 +792,21 @@ tr.grade-major td {
   border-bottom: 1px solid var(--line-soft);
 }
 
+/* 牌面组：卡片必须相邻排列。
+   注意：若把 CardRow 直接放进 .settings-row（space-between 的 flex 容器），
+   每张牌会成为独立的 flex 子项并被均匀撑开，视觉上像散落的牌。
+   因此牌面统一包在 .card-group 内，由它保持紧凑间距。 */
+.card-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.card-group + .card-group {
+  margin-left: 10px;
+}
+
 .settings-row .label {
   display: flex;
   flex-direction: column;
