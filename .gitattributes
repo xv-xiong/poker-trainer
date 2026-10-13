@@ -1,0 +1,18 @@
+# 统一使用 LF，避免 Windows 上的 CRLF 转换污染 diff 与构建产物
+* text=auto eol=lf
+
+# 二进制文件不做文本转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# 明确语言标记，便于 GitHub 统计
+*.ts text linguist-language=TypeScript
+*.tsx text linguist-language=TypeScript
+*.css text linguist-language=CSS
+*.mjs text linguist-language=JavaScript
+*.json text linguist-detectable=true
