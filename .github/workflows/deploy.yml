@@ -1,0 +1,72 @@
+/**
+ * 部署到 GitHub Pages。
+ *
+ * 关键点：
+ * - vite.config.ts 必须设 base: '/poker-trainer/'，否则项目站点的静态资源会 404
+ * - 构建产物在 dist/，由 upload-pages-artifact 打包、deploy-pages 发布
+ * - Action 版本为实测可解析的具体版本（不用 @v4 这类浮动标签）
+ * - Node 版本 24 满足 vite 8 的 engines 要求（^20.19.0 || >=22.12.0）
+ */
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7.0.1
+
+      - name: 安装 Node
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查
+        run: npx tsc --noEmit
+
+      - name: 单元与属性测试
+        run: npx vitest run
+
+      - name: 全量牌型直方图校验
+        run: node scripts/verify-hand-histogram.mjs
+
+      - name: 生产构建
+        run: npx vite build
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v6
+
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 发布到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5.0.1

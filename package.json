@@ -1,0 +1,34 @@
+{
+  "name": "poker-trainer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "德州扑克单人练习网页：6 人桌对局 + 决策复盘 + 分级胜率计算",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort --host 127.0.0.1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "gen:table": "node scripts/gen-preflop-table.mjs",
+    "gen:anchors": "node scripts/gen-exact-anchors.mjs",
+    "verify": "node scripts/verify-all.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.0",
+    "@types/node": "^26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "fast-check": "4.10.2",
+    "jsdom": "30.1.2",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.4"
+  }
+}

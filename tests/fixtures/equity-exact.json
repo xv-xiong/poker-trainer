@@ -1,0 +1,131 @@
+{
+  "meta": {
+    "generatedAt": "2026-10-13T09:52:00.097Z",
+    "source": "精确枚举值（确定性常量，可作断言基准）",
+    "note": "翻牌前精确枚举规模为 C(50,5)xC(45,2)=2,097,572,400 次摊牌，单只手牌需数千秒，故不生成；翻牌前一律以查表值（preflop-table.json）为断言基准。",
+    "opponentCount": 1
+  },
+  "anchors": [
+    {
+      "id": "river-AA-dry",
+      "hero": "As Ah",
+      "board": "2c 7d 9h Js 4d",
+      "boardLength": 5,
+      "equity": 0.8772727272727273,
+      "showdowns": 990,
+      "wins": 868,
+      "ties": 1,
+      "source": "exact"
+    },
+    {
+      "id": "river-nuts-flush",
+      "hero": "As Ks",
+      "board": "Qs Js Ts 2d 3c",
+      "boardLength": 5,
+      "equity": 1,
+      "showdowns": 990,
+      "wins": 990,
+      "ties": 0,
+      "source": "exact"
+    },
+    {
+      "id": "river-board-is-nuts",
+      "hero": "2c 3d",
+      "board": "As Ks Qs Js Ts",
+      "boardLength": 5,
+      "equity": 0.5,
+      "showdowns": 990,
+      "wins": 0,
+      "ties": 990,
+      "source": "exact"
+    },
+    {
+      "id": "river-set-vs-draw",
+      "hero": "9c 9d",
+      "board": "9h Ts Js 2c 3d",
+      "boardLength": 5,
+      "equity": 0.9454545454545454,
+      "showdowns": 990,
+      "wins": 936,
+      "ties": 0,
+      "source": "exact"
+    },
+    {
+      "id": "river-wheel",
+      "hero": "Ah 2d",
+      "board": "3c 4s 5h Kd Qc",
+      "boardLength": 5,
+      "equity": 0.9671717171717171,
+      "showdowns": 990,
+      "wins": 953,
+      "ties": 9,
+      "source": "exact"
+    },
+    {
+      "id": "turn-AA-dry",
+      "hero": "As Ah",
+      "board": "2c 7d 9h Js",
+      "boardLength": 4,
+      "equity": 0.8487922705314009,
+      "showdowns": 45540,
+      "wins": 38632,
+      "ties": 44,
+      "source": "exact"
+    },
+    {
+      "id": "turn-flush-draw",
+      "hero": "As Ks",
+      "board": "Qs 7s 2h 9d",
+      "boardLength": 4,
+      "equity": 0.5909639877031181,
+      "showdowns": 45540,
+      "wins": 26755,
+      "ties": 315,
+      "source": "exact"
+    },
+    {
+      "id": "turn-two-pair",
+      "hero": "Kc Qd",
+      "board": "Kh Qs 5c 8d",
+      "boardLength": 4,
+      "equity": 0.9569169960474309,
+      "showdowns": 45540,
+      "wins": 43490,
+      "ties": 176,
+      "source": "exact"
+    },
+    {
+      "id": "flop-AA-dry",
+      "hero": "As Ah",
+      "board": "2c 7d 9h",
+      "boardLength": 3,
+      "equity": 0.8544193087208813,
+      "showdowns": 1070190,
+      "wins": 913896,
+      "ties": 990,
+      "source": "exact"
+    },
+    {
+      "id": "flop-set",
+      "hero": "9c 9d",
+      "board": "9h Ts 2c",
+      "boardLength": 3,
+      "equity": 0.9383357160877975,
+      "showdowns": 1070190,
+      "wins": 1004133,
+      "ties": 129,
+      "source": "exact"
+    },
+    {
+      "id": "flop-flush-draw",
+      "hero": "As Ks",
+      "board": "Qs 7s 2h",
+      "boardLength": 3,
+      "equity": 0.726829815266448,
+      "showdowns": 1070190,
+      "wins": 773989,
+      "ties": 7714,
+      "source": "exact"
+    }
+  ]
+}
