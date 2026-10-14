@@ -19,7 +19,7 @@ import {
   nextStreet,
   resetForNewStreet,
 } from './betting.js';
-import { seatRoles } from './pot.js';
+import { seatRoles, validatePots } from './pot.js';
 import { settleHand } from './showdown.js';
 import { rank7 } from './rank7.js';
 import type {
@@ -371,6 +371,17 @@ export function checkChipConservation(state: HandState): string[] {
   if (totalCommitted !== potTotal) {
     errors.push(`投入总额 ${totalCommitted} != 底池总额 ${potTotal}`);
   }
+  // 分层结构校验：必须显式包含「层金额 > 0 但无有资格者」这一项。
+  //
+  // 为什么在此重复校验：settleHand 早已算出该诊断（ShowdownResult.errors），
+  // 但结果对象在 finish() 中被丢弃，任何调用方都读不到——等于这条不变量没有被闸门强制。
+  // 空有资格层会使该层金额既不分配也不退还（筹码守恒被破坏），是本项目最隐蔽的资金错乱形态，
+  // 因此必须在验收闸门直接可见（G4 逐手调用本函数）。
+  const potErrors = validatePots(
+    { committed: state.seats.map((s) => s.committed), folded: state.seats.map((s) => s.folded) },
+    state.pots,
+  );
+  errors.push(...potErrors);
   return errors;
 }
 

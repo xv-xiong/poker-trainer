@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { GameController, type ControllerSnapshot } from './controller.js';
 import { createEquityClient } from './equityClient.js';
 import { createMemoryStorage, type StorageLike } from '../store/persistence.js';
+import { settlementBreakdown, type SettlementLine } from '../core/showdown.js';
 import { TableView } from './components/TableView.js';
 import { ActionBar } from './components/ActionBar.js';
 import { ReviewPanel } from './panels/ReviewPanel.js';
@@ -128,6 +129,31 @@ export function App() {
     [snap.revision, snap.state],
   );
 
+  /**
+   * 结算分行明细（主池 / 边池 / 未跟注退还）。
+   *
+   * 为什么要有这个展示：新手最典型的金额误解是「我下注后对手弃牌，我赢的是那整个底池」——
+   * 实际上只有对手跟到的部分才是赢来的，超出部分是自己被退回来的钱。
+   * 参考站把这两类分开列（`raw/EXPORT-texas-3CD198.json` 的 `pots[].refund` 实证），
+   * 我方此前只显示「底池 30」，容易被误读成「赢了 30」（实际只赢 10）。
+   *
+   * 判据由 core 的 `settlementBreakdown` 提供（投入者人数，而非有资格者人数），
+   * 金额与真实分配同源，此处只负责渲染，不参与任何计算。
+   */
+  const settlementLines: SettlementLine[] = useMemo(() => {
+    const st = snap.state;
+    if (!st?.finished) return [];
+    // 必须用摊牌时的真实牌型值，不能用常量：
+    // 若传常量，争夺层里所有有资格者都会「并列最强」，被错误地全部列为归属者
+    // （例如两人摊牌会显示成两人都赢下主池）。无摊牌时 showdownValues 为空，
+    // 此时争夺层只剩一名未弃牌者，任何 rankOf 都给出同一结果，故回退值安全。
+    const rankOf = (seat: number): number => st.showdownValues[seat] ?? -Infinity;
+    return settlementBreakdown(st.pots, rankOf);
+  }, [snap.revision, snap.state]);
+
+  const seatLabelOf = (seat: number): string =>
+    snap.state?.seats[seat]?.name ?? `座位 ${seat + 1}`;
+
   const lastHandNet = snap.lastRecord?.heroNet ?? 0;
 
   return (
@@ -230,6 +256,42 @@ export function App() {
                   <div className="v">{snap.state.pots.length}</div>
                 </div>
               </div>
+
+              {settlementLines.length > 0 && (
+                <>
+                  <h3>分配明细（主池 / 边池 / 未跟注退还）</h3>
+                  <table className="settlement-table">
+                    <thead>
+                      <tr>
+                        <th>类型</th>
+                        <th>金额</th>
+                        <th>归属</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {settlementLines.map((line) => (
+                        <tr key={`${line.layerIndex}-${line.kind}`}>
+                          <td>
+                            {line.kind === 'uncalled' ? (
+                              <span className="tag ok">未跟注退还</span>
+                            ) : line.layerIndex === 0 ? (
+                              <span className="tag">主池</span>
+                            ) : (
+                              <span className="tag">边池 {line.layerIndex}</span>
+                            )}
+                          </td>
+                          <td className="num">{line.amount}</td>
+                          <td>{line.recipients.map(seatLabelOf).join('、') || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="muted small" style={{ marginTop: 6 }}>
+                    「未跟注退还」是你自己下注后无人跟到的部分，会原样退回，不计入赢来的筹码。
+                  </div>
+                </>
+              )}
+
               <div className="action-row" style={{ marginTop: 12 }}>
                 <button className="primary" onClick={() => setTab('review')}>
                   查看复盘

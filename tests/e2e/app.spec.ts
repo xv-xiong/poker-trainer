@@ -87,6 +87,125 @@ test.describe('G8 端到端全链路', () => {
     expect(errors).toEqual([]);
   });
 
+  test('结算面板展示分配明细：主池 / 边池 / 未跟注退还分行', async ({ page }) => {
+    const { errors } = attachErrorCollector(page);
+    await page.goto('/poker-trainer/');
+    await playHandToCompletion(page);
+    await expect(page.getByRole('heading', { name: '本手结果' })).toBeVisible({ timeout: 30_000 });
+
+    // 明细区必须出现（只有金额 > 0 的层才会产生行，故断言「表头存在」而非固定行数）
+    await expect(page.getByRole('heading', { name: '分配明细（主池 / 边池 / 未跟注退还）' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: '类型' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: '金额' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: '归属' })).toBeVisible();
+
+    // 至少有一行，且每行金额为正整数、已解析出归属名
+    const rows = page.locator('.settlement-table tbody tr');
+    const n = await rows.count();
+    expect(n).toBeGreaterThan(0);
+    for (let i = 0; i < n; i++) {
+      const amountText = await rows.nth(i).locator('td').nth(1).innerText();
+      const amount = Number(amountText.trim());
+      expect(Number.isInteger(amount)).toBe(true);
+      expect(amount).toBeGreaterThan(0);
+      const who = (await rows.nth(i).locator('td').nth(2).innerText()).trim();
+      expect(who.length).toBeGreaterThan(0);
+    }
+
+    expect(errors).toEqual([]);
+  });
+
+  test('单挑小盲弃牌时，结算面板出现「未跟注退还」行（确定性场景）', async ({ page }) => {
+    const { errors } = attachErrorCollector(page);
+    await page.goto('/poker-trainer/');
+    await page.waitForSelector('[role="tab"]', { timeout: 30_000 });
+
+    // 固定为 2 人桌：这是**必然**产生「未跟注退还」的可控局面。
+    // 单挑盲注 5/10 → 我（庄家即小盲）投 5、AI 投 10。我弃牌后：
+    //   层 1：level 5  → 2 名投入者 × 5 = 10 → 主池（contested）
+    //   层 2：level 10 → 1 名投入者 × 5 = 5  → 未跟注退还（uncalled）
+    // 6 人桌全下时 5 个 AI 都会跟注，永远凑不出未注层，故必须用单挑。
+    //
+    // 注意：首次加载时 localStorage 为空（App 只在动作后才写状态），
+    // 因此不能只做「读出来改一下」——必须准备好一份完整状态再 reload，
+    // 否则 seatCount 仍是 6，测试会因场景不成立而失败（曾如此踩坑）。
+    await page.evaluate(() => {
+      const key = 'poker-trainer:state';
+      let st: Record<string, unknown> | null = null;
+      try {
+        const raw = localStorage.getItem(key);
+        st = raw ? JSON.parse(raw) : null;
+      } catch {
+        st = null;
+      }
+      if (!st || typeof st.settings !== 'object' || st.settings === null) {
+        st = {
+          schemaVersion: 1,
+          bankroll: 1000,
+          stats: {
+            handsPlayed: 0,
+            handsWon: 0,
+            showdownsSeen: 0,
+            showdownsWon: 0,
+            totalWagered: 0,
+            netProfit: 0,
+            vpipHands: 0,
+            pfrHands: 0,
+            hintsUsed: 0,
+            reviewCounts: { ok: 0, review: 0, major: 0 },
+            topUps: 0,
+            topUpAmount: 0,
+          },
+          settings: {
+            seatCount: 2,
+            startingStack: 1000,
+            smallBlind: 5,
+            bigBlind: 10,
+            aiTier: 'medium',
+            fourColorDeck: true,
+            showShortcuts: true,
+            enableFlopExact: false,
+          },
+          nextDealerSeat: 0,
+          handCounter: 0,
+        };
+      } else {
+        (st.settings as Record<string, unknown>).seatCount = 2;
+      }
+      localStorage.setItem(key, JSON.stringify(st));
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[role="tab"]', { timeout: 30_000 });
+    await page.waitForTimeout(1200);
+
+    // 轮到我立刻弃牌
+    for (let i = 0; i < 60; i++) {
+      if (await page.getByRole('heading', { name: '本手结果' }).isVisible().catch(() => false)) break;
+      const foldBtn = page.getByRole('button', { name: '弃牌（Fold）' }).first();
+      if ((await foldBtn.isVisible().catch(() => false)) && (await foldBtn.isEnabled().catch(() => false))) {
+        await foldBtn.click({ timeout: 5000 }).catch(() => {});
+        break;
+      }
+      await page.waitForTimeout(220);
+    }
+
+    await expect(page.getByRole('heading', { name: '分配明细（主池 / 边池 / 未跟注退还）' })).toBeVisible({
+      timeout: 30_000,
+    });
+    // 必须同时出现主池行与未跟注退还行
+    await expect(page.locator('.settlement-table tbody tr', { hasText: '主池' }).first()).toBeVisible();
+    const refundRow = page.locator('.settlement-table tbody tr', { hasText: '未跟注退还' }).first();
+    await expect(refundRow).toBeVisible();
+
+    // 退还行金额为正，且归属非空
+    const amount = Number((await refundRow.locator('td').nth(1).innerText()).trim());
+    expect(Number.isInteger(amount)).toBe(true);
+    expect(amount).toBeGreaterThan(0);
+    expect((await refundRow.locator('td').nth(2).innerText()).trim().length).toBeGreaterThan(0);
+
+    expect(errors).toEqual([]);
+  });
+
   test('历史记录在本手结束后增加一条', async ({ page }) => {
     const { errors } = attachErrorCollector(page);
     await page.goto('/poker-trainer/');

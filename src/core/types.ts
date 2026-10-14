@@ -85,12 +85,35 @@ export interface ActionRecord {
   readonly stackAtAction: number;
 }
 
+/**
+ * 一层底池的性质（结算口径标注）。
+ *
+ * 为什么需要区分：真实牌桌上「唯一最高投入者超出次高投入的那部分」并不参与胜负比较，
+ * 而是原样退还（uncalled bet returned，未被跟注的退还）。参考站结算面板把同一笔钱
+ * 拆成「主池」与「未跟注退还」两行显示；本字段让 core 层能给出同口径的数据，
+ * 而不改动金额计算（金额本就正确，见 pot.ts 的层金额公式）。
+ */
+export type PotLayerKind =
+  /** 被至少两名投入者争夺：该层由牌型决定归属。 */
+  | 'contested'
+  /** 仅一名投入者：该层即未被跟注的退还，必然原样回到该投入者手中。 */
+  | 'uncalled';
+
 /** 一个边池层。 */
 export interface PotLayer {
   /** 该层总筹码。 */
   readonly amount: number;
   /** 有资格争夺该层的座位索引。 */
   readonly eligible: number[];
+  /**
+   * 参与该层投入的座位索引（含已弃牌者，升序）。
+   *
+   * 可选：v1 持久化记录（localStorage 中的历史）没有此字段，读取旧记录时必须容忍。
+   * 新增此字段是纯增量，不改变任何金额，因此不递增 schemaVersion。
+   */
+  readonly contributors?: number[];
+  /** 该层性质；同样为可选，以兼容 v1 旧记录。 */
+  readonly kind?: PotLayerKind;
 }
 
 /** 单手对局状态。 */

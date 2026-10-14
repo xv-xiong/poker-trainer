@@ -783,6 +783,24 @@ tr.grade-major td {
   text-align: center;
 }
 
+/* 结算分配明细表：主池 / 边池 / 未跟注退还 */
+.settlement-table {
+  margin-top: 4px;
+}
+
+.settlement-table td,
+.settlement-table th {
+  padding: 6px 9px;
+}
+
+.settlement-table td:first-child {
+  width: 130px;
+}
+
+.settlement-table td:nth-child(2) {
+  width: 90px;
+}
+
 .settings-row {
   display: flex;
   align-items: center;

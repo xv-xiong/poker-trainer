@@ -37,8 +37,8 @@ export function buildPots(input: PotInput): PotLayer[] {
   let prev = 0;
 
   for (const level of levels) {
-    const contributors = [];
-    const eligible = [];
+    const contributors: number[] = [];
+    const eligible: number[] = [];
     for (let i = 0; i < n; i++) {
       if (committed[i] >= level) {
         contributors.push(i);
@@ -47,7 +47,17 @@ export function buildPots(input: PotInput): PotLayer[] {
     }
     const amount = (level - prev) * contributors.length;
     // 金额为 0 的层（例如某座位投入 0）不应出现
-    if (amount > 0) layers.push({ amount, eligible });
+    if (amount > 0) {
+      // contributors 按座位索引升序天然有序（上面的循环 i 递增）。
+      // 结算口径：单一投入者的层 = 未被跟注的退还（uncalled bet），
+      // 多人投入 = 真正被争夺的层。此处只做标注，不改变金额与分配逻辑。
+      layers.push({
+        amount,
+        eligible,
+        contributors,
+        kind: contributors.length <= 1 ? 'uncalled' : 'contested',
+      });
+    }
     prev = level;
   }
 
@@ -93,14 +103,52 @@ export function distributePots(
   const payout = new Array<number>(seatCount).fill(0);
 
   for (const layer of pots) {
-    if (layer.eligible.length === 0) continue;
+    if (layer.eligible.length === 0) {
+      // 兜底：本层无人有资格分配。
+      //
+      // 按规则这**不应发生**（不变量：按投入额分层后每层至少有一名未弃牌的有资格玩家；
+      // 论证见文件头，实证见 tests/property/pot-audit.test.ts 的 10,000 手属性测试）。
+      // 但 `buildPots` 是导出的纯函数，可被任意输入调用（现有 G5 用例即构造了不可达输入），
+      // 因此此处绝不能把筹码吞掉——既不分配也不退还就是静默的资金错乱。
+      // 兜底语义：原样退还给该层的投入者（amount 恒等于 (层高差 × 投入者数)，可整除）。
+      // 旧记录（v1 持久化）没有 contributors 字段、且此处 eligible 为空，已无归属信息，
+      // 此时退化为「按座位均摊」——牺牲归属准确性，但保证筹码守恒（绝不静默销毁）。
+      const owners =
+        layer.contributors && layer.contributors.length > 0
+          ? layer.contributors.filter((s) => Number.isInteger(s) && s >= 0 && s < seatCount)
+          : new Array(seatCount).fill(0).map((_, i) => i);
+      if (owners.length === 0) continue;
+      const refund = Math.floor(layer.amount / owners.length);
+      let left = layer.amount - refund * owners.length;
+      for (const o of owners) payout[o] += refund;
+      for (const o of owners) {
+        if (left <= 0) break;
+        payout[o] += 1;
+        left--;
+      }
+      continue;
+    }
     let best = -Infinity;
     for (const seat of layer.eligible) {
       const v = rankOf(seat);
       if (v > best) best = v;
     }
     const winners = layer.eligible.filter((s) => rankOf(s) === best);
-    if (winners.length === 0) continue;
+    // 兜底：与上面「空有资格层」同一类风险的姊妹分支。
+    // 只有当 rankOf 对所有有资格者都返回 NaN（比较恒为 false）时才会走到这里——
+    // 正常牌型值不会出现 NaN，但绝不能因此把该层筹码静默丢弃：退化为在有资格者间均分，
+    // 保证 Σ 分得 == Σ 投入 这一硬不变量优先于归属准确性。
+    if (winners.length === 0) {
+      const share0 = Math.floor(layer.amount / layer.eligible.length);
+      let left0 = layer.amount - share0 * layer.eligible.length;
+      for (const s of layer.eligible) payout[s] += share0;
+      for (const s of layer.eligible) {
+        if (left0 <= 0) break;
+        payout[s] += 1;
+        left0--;
+      }
+      continue;
+    }
 
     const share = Math.floor(layer.amount / winners.length);
     let remainder = layer.amount - share * winners.length;

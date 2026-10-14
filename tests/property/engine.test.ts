@@ -174,10 +174,18 @@ describe('G5 边池构建', () => {
     expect(payouts.length).toBe(3);
     for (const p of payouts) expect(Number.isNaN(p)).toBe(false);
     // 第 0 层：三人各 100，共 300，唯一有资格者座位 1 独得；
-    // 第 1 层：仅座位 2 投入的 200，但座位 2 已弃牌故无有资格者，该层不分配。
+    // 第 1 层：仅座位 2 投入的 200，但座位 2 已弃牌故无有资格者。
+    //
+    // 注意：本用例是**人为构造的不可达输入**（最高投入者弃牌在引擎中不可能发生，
+    // 见 tests/property/pot-audit.test.ts 的 Q2 属性测试）。此前此处断言
+    // 「该层不分配」→ Σ 分得 = 300 ≠ 总投入 500，等于把「静默销毁 200 筹码」
+    // 当作正确行为锁进测试。该断言本身是错的，已纠正为「原样退还投入者」，
+    // 使 Σ 分得 == Σ 投入 == 500（distributePots 现对该情形做退还兜底）。
     expect(pots.map((p) => p.amount)).toEqual([300, 200]);
     expect(pots[1].eligible).toEqual([]);
-    expect(payouts.reduce((a, b) => a + b, 0)).toBe(300);
+    expect(validatePots({ committed, folded }, pots)).toEqual(['第 1 层金额 200 > 0 但无有资格座位']);
+    expect(payouts[2]).toBe(200);
+    expect(payouts.reduce((a, b) => a + b, 0)).toBe(500);
   });
 
   it('未被跟注的超额投入情形：唯一未弃牌者拿回全部投入（净收益为对手投入）', () => {
