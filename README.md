@@ -18,6 +18,18 @@
 
 ---
 
+## 界面截图
+
+| 开始界面 | 牌桌与 AI 演出 |
+|---|---|
+| ![开始界面](https://raw.githubusercontent.com/xv-xiong/poker-trainer/main/docs/screenshots/start.png) | ![牌桌](https://raw.githubusercontent.com/xv-xiong/poker-trainer/main/docs/screenshots/table.png) |
+
+| 结算明细 | 决策复盘 |
+|---|---|
+| ![结算](https://raw.githubusercontent.com/xv-xiong/poker-trainer/main/docs/screenshots/settlement.png) | ![复盘](https://raw.githubusercontent.com/xv-xiong/poker-trainer/main/docs/screenshots/review.png) |
+
+---
+
 ## 主要功能
 
 | 功能 | 说明 |
@@ -204,6 +216,15 @@ npm run gen:anchors   # 重建精确枚举锚点（约 1 秒）
 
 ---
 
+## 参与贡献
+
+欢迎提交 Issue 与 Pull Request。请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)——尤其是「`npm run verify` 必须全绿」与「不得为了让测试通过而放宽断言」两条。
+
+安全问题请见 [SECURITY.md](SECURITY.md)，社区行为准则见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+
+---
+
 ## 许可证
 
-MIT
+[MIT](LICENSE) © xv-xiong
+
