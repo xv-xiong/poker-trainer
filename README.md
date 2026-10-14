@@ -1,5 +1,10 @@
 # 德州扑克练习台 · Texas Hold'em Trainer
 
+[![CI](https://github.com/xv-xiong/poker-trainer/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/xv-xiong/poker-trainer/actions/workflows/ci.yml)
+[![Deploy to GitHub Pages](https://github.com/xv-xiong/poker-trainer/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/xv-xiong/poker-trainer/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-20.19%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+
 单人练习用的德州扑克网页。6 人桌（可切 2 / 6 / 9 人）与 5 个 AI 对手完整对局，每手结束后给出逐决策点的 EV 复盘。
 
 **线上地址**：https://xv-xiong.github.io/poker-trainer/
@@ -220,7 +225,7 @@ npm run gen:anchors   # 重建精确枚举锚点（约 1 秒）
 
 欢迎提交 Issue 与 Pull Request。请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)——尤其是「`npm run verify` 必须全绿」与「不得为了让测试通过而放宽断言」两条。
 
-安全问题请见 [SECURITY.md](SECURITY.md)，社区行为准则见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+安全问题请见 [SECURITY.md](SECURITY.md)，社区行为准则见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)，版本发布流程见 [RELEASING.md](RELEASING.md)。
 
 ---
 

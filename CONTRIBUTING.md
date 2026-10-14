@@ -12,11 +12,12 @@
 ## 本地开发
 
 ```bash
-npm install
+npm ci
 npm run dev          # 本地开发
-npm run verify       # 全量验收（约 12 分钟）
-npx vitest run       # 只跑单元/属性测试
-npx playwright test  # 只跑 E2E
+npm run typecheck    # TypeScript 类型检查
+npm run test         # 单元/属性测试
+npm run test:e2e     # Playwright 端到端测试
+npm run verify       # 全量验收（牌型枚举、测试、构建、E2E）
 ```
 
 ## 提交规范

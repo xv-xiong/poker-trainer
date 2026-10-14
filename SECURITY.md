@@ -4,7 +4,7 @@
 
 如果你发现了安全漏洞，请**不要**提交公开 Issue。
 
-请通过 GitHub 的 [Private Vulnerability Reporting](https://github.com/xv-xiong/poker-trainer/security/advisories/new) 私下报告。我们会在 48 小时内确认收到，并在 7 天内给出初步评估。
+请通过 GitHub 的 [Private Vulnerability Reporting](https://github.com/xv-xiong/poker-trainer/security/advisories/new) 私下报告。项目维护者会尽力在 7 天内确认收到并给出初步评估。
 
 ## 适用范围
 

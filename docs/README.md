@@ -15,8 +15,11 @@ README 中展示的四张截图，均截取自**线上地址**
 重新截图：
 
 ```bash
-# 需先全局安装 playwright 并在项目内可用
-node scripts/capture-screenshots.mjs
+npm ci
+npm run build
+npm run preview
+# 另一个终端
+node scripts/capture-screenshots.mjs http://127.0.0.1:4173/poker-trainer/ docs/screenshots
 ```
 
 ## 设计参考

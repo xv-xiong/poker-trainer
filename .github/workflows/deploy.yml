@@ -41,17 +41,11 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      - name: 类型检查
-        run: npx tsc --noEmit
+      - name: 安装 Playwright Chromium 与系统依赖
+        run: npx playwright install --with-deps chromium
 
-      - name: 单元与属性测试
-        run: npx vitest run
-
-      - name: 全量牌型直方图校验
-        run: node scripts/verify-hand-histogram.mjs
-
-      - name: 生产构建
-        run: npx vite build
+      - name: 全量验收闸门
+        run: npm run verify
 
       - name: 配置 Pages
         uses: actions/configure-pages@v6.0.0
