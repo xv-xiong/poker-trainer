@@ -13,9 +13,23 @@
  * 未设置 LIVE_URL 时整组跳过，避免离线环境下误报失败。
  */
 
-import { test, expect, type ConsoleMessage } from '@playwright/test';
+import { test, expect, type ConsoleMessage, type Page } from '@playwright/test';
 
 const LIVE_URL = process.env.LIVE_URL;
+
+/**
+ * 从开始界面进入牌桌。
+ *
+ * 线上验收同样要覆盖新的开始界面入口：首访不再直接发牌，
+ * 若少了这一步，线上用例会停在开始界面并全线失败。
+ */
+async function enterTable(page: Page): Promise<void> {
+  const start = page.getByRole('button', { name: '开始练习' });
+  if (await start.isVisible().catch(() => false)) {
+    await start.click();
+  }
+  await page.waitForSelector('[role="tab"]', { timeout: 30_000 });
+}
 
 test.describe('线上部署验收（GitHub Pages）', () => {
   test.skip(!LIVE_URL, '未设置 LIVE_URL，跳过线上验收');
@@ -23,6 +37,8 @@ test.describe('线上部署验收（GitHub Pages）', () => {
   test('首页返回 200 且标题正确', async ({ page }) => {
     const resp = await page.goto(LIVE_URL!, { waitUntil: 'domcontentloaded' });
     expect(resp?.status()).toBe(200);
+    // 首访是开始界面，标题在进桌后才出现
+    await enterTable(page);
     await expect(page.getByRole('heading', { name: '德州扑克练习台' })).toBeVisible();
   });
 
@@ -32,6 +48,8 @@ test.describe('线上部署验收（GitHub Pages）', () => {
       if (r.status() >= 400) failed.push(`${r.status()} ${r.url()}`);
     });
     await page.goto(LIVE_URL!, { waitUntil: 'networkidle' });
+    await enterTable(page);
+    await expect(page.locator('.felt')).toBeVisible();
     expect(failed).toEqual([]);
   });
 
@@ -43,6 +61,7 @@ test.describe('线上部署验收（GitHub Pages）', () => {
     page.on('pageerror', (e) => errors.push(e.message));
 
     await page.goto(LIVE_URL!, { waitUntil: 'domcontentloaded' });
+    await enterTable(page);
     await expect(page.getByText('底池（Pot）')).toBeVisible();
 
     // 打到本手结束
@@ -81,6 +100,7 @@ test.describe('线上部署验收（GitHub Pages）', () => {
       if (r.url().includes('worker')) workerUrls.push(r.url());
     });
     await page.goto(LIVE_URL!, { waitUntil: 'domcontentloaded' });
+    await enterTable(page);
     await expect(page.getByText('底池（Pot）')).toBeVisible();
 
     // 触发提示以真正实例化 Worker

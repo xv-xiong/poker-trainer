@@ -1,0 +1,151 @@
+/* ============================================================
+   风格令牌层（Design Tokens）
+   ------------------------------------------------------------
+   本文件是全局唯一的「颜色 / 尺寸 / 动效」取值来源。
+   app.css 只引用这里的变量，不直接写魔法色值；后续要调色，
+   改本文件一处即可。
+
+   取值来源：参考站实际下发的 CSS 源码（非目测，证据存档在
+   `_local_only/outputs/poker-trainer-ref-research/raw/ref-style/ref-style.css`
+   与 `ref-motion.css`）。名字保持自解释，注释里标注英文术语。
+
+   为什么 CSS 里还要有中文注释：本项目是中文单人练习工具，
+   后续维护者多为中文读者，「哪个变量管哪块」比色号更重要。
+   ============================================================ */
+
+:root {
+  /* ---------- 基础文字色（英文 term: foreground / muted） ---------- */
+  --fg-0: #e8ede8; /* 正文主色 */
+  --fg-1: #becbbf; /* 次级文字（标签、说明） */
+  --fg-2: #91a298; /* 弱化文字（muted，时间戳、提示） */
+
+  /* ---------- 底色层次（background elevation） ----------
+     --bg-0 页面底 / --bg-1 面板与输入框 / --bg-2 按钮 / --bg-3 悬浮层 */
+  --bg-0: #101916;
+  --bg-1: #122019;
+  --bg-2: #283a30;
+  --bg-3: #3a5140;
+
+  /* ---------- 线条与容器（border / panel） ----------
+     参考站原令牌就叫 --border / --panel / --muted，这里保留同名别名：
+     一是读参考站源码时能一一对上，二是将来若直接粘贴参考站片段仍能生效。 */
+  --line: #304039; /* 通用边框 */
+  --line-soft: #24322b; /* 更弱的分隔线 */
+  --line-strong: #405045; /* 按钮等需要明确轮廓的边框 */
+  --panel: #192720;
+  --border: var(--line);
+  --muted: var(--fg-2);
+
+  /* ---------- 主色（gold）与语义别名 ----------
+     主色只用金色一处，避免多主色打架。
+     --accent / --accent-* 是语义别名，值指向金色系：
+     面板与组件统一用 --accent，换主色只改这一组。 */
+  --gold: #e7c183;
+  --gold-dim: #a99060; /* 主色的暗态，用于需要压低的描边 */
+  --gold-soft: rgba(231, 193, 131, 0.12); /* 主色淡底 */
+  --gold-text: #1c2a21; /* 金色底上的文字色（深绿，保证对比度） */
+
+  --accent: var(--gold);
+  --accent-dim: var(--gold-dim);
+  --accent-soft: var(--gold-soft);
+
+  /* ---------- 状态色（win / warn / danger） ---------- */
+  --win: #8cd4a7; /* 盈利、正收益 */
+  --warn: #ffb020; /* 提醒、需要留意 */
+  --warn-soft: rgba(255, 176, 32, 0.14);
+  --danger: #ff8f86; /* 危险动作（弃牌、明显偏离） */
+  --danger-soft: rgba(255, 143, 134, 0.14);
+  --info: #8ec4e8;
+
+  /* ---------- 牌面四色（four-color deck） ----------
+     无障碍取向：黑桃黑 / 红桃红 / 方块蓝 / 梅花绿，
+     对红绿色觉障碍者仍可区分。
+     两色模式（.two-color）下由 app.css 覆盖为「红 / 黑」传统配色。 */
+  --suit-spade: #21312a;
+  --suit-heart: #bf4e48;
+  --suit-diamond: #2467a8;
+  --suit-club: #2f7a4a;
+
+  --suit-red-2color: #bf4e48; /* 两色模式的「红」 */
+  --suit-black-2color: #21312a; /* 两色模式的「黑」 */
+
+  /* 牌面本体（playing card） */
+  --card-face: #f4f1e7; /* 牌面米白 */
+  --card-ink: #21312a; /* 牌面默认字色（两色模式的「黑」同值，与参考站一致） */
+  --card-red: #bf4e48; /* 牌面「红」；两色模式下 ♥ 与 ♦ 都用它 */
+  --card-shadow: 0 3px 8px #0005;
+
+  /* 牌背（card back）：斜纹，配浅描边形成「纸质」感 */
+  --card-back: repeating-linear-gradient(45deg, #22433c, #22433c 3px, #2d5045 3px, #2d5045 6px);
+  --card-back-border: #a6b5a1;
+
+  /* ---------- 牌桌（felt / table） ----------
+     --felt-* 与参考站同名：绿绒径向渐变（radial-gradient）。
+     E2E 会断言牌桌背景确实是 radial-gradient，改这里等于改断言目标。 */
+  --felt: radial-gradient(at 50% 40%, #21634a, #124130);
+  --felt-bg: var(--felt);
+  --felt-border: #363b2c;
+  --felt-border-width: 6px;
+  --felt-ring: #727259; /* 内圈亮线（inset ring） */
+  --felt-shadow: 0 12px 35px #0005;
+
+  /* ---------- 座位与胶囊（seat / pill） ---------- */
+  --seat-bg: #14261f;
+  --seat-border: #52614b;
+  --seat-shadow: 0 3px 8px #0004;
+  --pill-bg: #1e3025; /* 底池胶囊等 */
+  --pill-border: #6d6343;
+  --pill-fg: #c9d5c9;
+
+  /* 赢牌高亮（winner highlight） */
+  --win-outline: #ffd77a;
+  --win-glow: 0 0 16px #ffdc6c99;
+
+  /* ---------- 圆角与阴影（radius / elevation） ---------- */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-md: 9px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 6px 24px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 0 0 1px rgba(231, 193, 131, 0.35), 0 0 22px rgba(231, 193, 131, 0.16);
+
+  /* ---------- 字体（typography） ----------
+     --font-num 用等宽 + tabular-nums：筹码数、底池、胜率等数字
+     必须对齐，否则每帧变宽会让整块面板抖动。 */
+  --font-ui: Inter, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-num: 'JetBrains Mono', 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+  --mono-tabular: tabular-nums;
+
+  --fs-eyebrow: 10px; /* 眉毛字：小号 + 宽字距，用于分区提示 */
+  --ls-eyebrow: 2px;
+  --fs-display: 68px; /* 开始界面大标题 */
+  --ls-display: -3px;
+
+  /* ---------- 尺寸（layout） ---------- */
+  --header-h: 78px;
+  --page-max: 1360px;
+
+  /* ---------- 动效（motion） ----------
+     所有时长集中在此，方便统一调慢/调快；
+     prefers-reduced-motion 下由文件末尾统一关闭。 */
+  --t-btn: 0.18s; /* 按钮反馈 */
+  --t-seat: 0.5s; /* 座位移动 */
+  --t-card: 0.35s; /* 发牌位移 */
+  --t-fade: 0.3s; /* 透明度过渡 */
+  --ease-out: ease-out;
+  --ease-soft: ease;
+}
+
+/* 尊重「减少动态效果」偏好（WCAG 2.2 · 2.3.3 Animation from Interactions）。
+   放在令牌层，保证即便某个组件样式表漏写也依然生效。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

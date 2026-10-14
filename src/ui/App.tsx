@@ -15,6 +15,10 @@ import { ReviewPanel } from './panels/ReviewPanel.js';
 import { StatsPanel } from './panels/StatsPanel.js';
 import { HistoryPanel } from './panels/HistoryPanel.js';
 import { SettingsPanel } from './panels/SettingsPanel.js';
+import { StartScreen } from './components/StartScreen.js';
+import { useTableShowcase } from './useTableShowcase.js';
+import { stepAiAction } from './showcaseStep.js';
+import './styles/tokens.css';
 import type { ActionType } from '../core/types.js';
 
 type Tab = 'table' | 'review' | 'stats' | 'history' | 'settings';
@@ -56,26 +60,67 @@ export function App() {
   const [hintLoading, setHintLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const actionStartRef = useRef<number>(Date.now());
+  /**
+   * 是否已通过开始界面进入牌桌。
+   *
+   * 为什么不让首访直达牌桌：首访会自动发牌、下盲注并让 AI 行动，
+   * 新用户没有机会先确认「桌人数 / 盲注 / 难度」是否符合预期。
+   * 因此必须先经过开始界面；但 `?skip-lobby=1` 或旧存档可直接进入，
+   * 让既有 E2E 与外部链接（GitHub Pages 书签）无须改动即可直达。
+   */
+  const [entered, setEntered] = useState<boolean>(
+    () => typeof window === 'undefined' || window.location.search.includes('skip-lobby'),
+  );
 
   useEffect(() => controller.subscribe(setSnap), [controller]);
 
-  // 轮到 AI 时自动推进。
-  // 依赖 snap.revision 而非 snap.state：state 是原地修改的对象，引用不会变，
-  // 若依赖引用则「玩家行动后 AI 不再行动」，本手会永久卡住（已由 E2E 捕获）。
+  /**
+   * 分步演出：AI 与玩家的每个动作都按「思考 → 动作 → 停顿」逐个呈现，
+   * 不再用 `controller.runAI()` 一次跑完整手（那会让结果瞬间跳出）。
+   *
+   * 接线要点见 useTableShowcase 的文档；这里只负责：
+   *   1. 提供「推进一名 AI」的回调（`stepAiAction`，与 runAI 的循环体逐字同构）
+   *   2. 用一个随 snap.revision 清理的定时器驱动「当前该执行的一步」
+   */
+  const runAiRef = useRef<() => boolean>(() => false);
+  const aiGuardRef = useRef(0);
+
+  const table = useTableShowcase({
+    snap,
+    heroSeat: controller.heroSeat,
+    runAiStep: () => runAiRef.current(),
+  });
+
   useEffect(() => {
-    if (!snap.state || snap.state.finished) return;
-    if (snap.state.actingSeat >= 0 && snap.state.actingSeat !== controller.heroSeat) {
-      const t = setTimeout(() => controller.runAI(), 300);
-      return () => clearTimeout(t);
-    }
-  }, [snap.revision, snap.state, controller]);
+    runAiRef.current = () => {
+      const st = controller.currentState();
+      if (!st) return false;
+      const out = stepAiAction(st, controller.heroSeat, aiGuardRef.current + 1);
+      if (!out.advanced) return false;
+      aiGuardRef.current += 1;
+      // 单步之后必须同步对外状态，否则界面不动、且本手结束时不落库
+      controller.settleAfterAiStep();
+      return true;
+    };
+  });
+
+  // 唯一的推进定时器：只执行「当前该执行的一步」，执行完由下一次 revision 驱动下一步。
+  // 依赖含 table.step（其身份已把揭示游标计入），否则翻牌会只翻第一张就卡住。
+  useEffect(() => {
+    if (table.step.kind === 'idle') return;
+    const t = setTimeout(() => table.run(table.step), Math.max(0, table.step.delayMs));
+    return () => clearTimeout(t);
+  }, [snap.revision, table.step, table.run]);
 
   // 玩家回合开始时记录起始时间（用于思考耗时）
   useEffect(() => {
-    if (snap.heroTurn) actionStartRef.current = Date.now();
-  }, [snap.heroTurn, snap.revision]);
+    if (table.view.canHeroAct) actionStartRef.current = Date.now();
+  }, [table.view.canHeroAct, snap.revision]);
 
   const handleAct = (type: ActionType, toAmount = 0) => {
+    // 演出闸：AI 思考中或公共牌未揭完时，不允许用脚本/快捷键抢出牌。
+    // 注意这只挡「抢跑」，不会吞掉玩家回合——演出结束后 canHeroAct 会恢复为 true。
+    if (!table.view.canHeroAct) return;
     const thinkMs = Date.now() - actionStartRef.current;
     const r = controller.act(type, toAmount, thinkMs);
     if (!r.ok) {
@@ -96,19 +141,23 @@ export function App() {
   };
 
   const handleNextHand = () => {
+    // 重置演出守卫计数：它用于步进 AI 的 RNG 派生，必须在每手开始时归零，
+    // 否则第二手起 AI 的决策序列会与「一次跑完」的基线不一致。
+    aiGuardRef.current = 0;
     controller.startHand();
-    controller.runAI();
+    // 不再调用 controller.runAI()：AI 推进改由分步演出驱动
   };
 
-  // 开局：首次进入自动发牌
+  // 开局：首次进入（且已从开始界面进桌）自动发牌
   useEffect(() => {
-    if (!snap.state) {
+    if (entered && !snap.state) {
+      aiGuardRef.current = 0;
       controller.startHand();
-      controller.runAI();
+      // 同上：AI 由分步演出驱动，不在此处一次性跑完
     }
-    // 仅在首次挂载时执行
+    // 仅在「已进桌 + 尚未发牌」时执行一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [entered]);
 
   // 快捷键：N 开始下一手
   useEffect(() => {
@@ -155,6 +204,16 @@ export function App() {
     snap.state?.seats[seat]?.name ?? `座位 ${seat + 1}`;
 
   const lastHandNet = snap.lastRecord?.heroNet ?? 0;
+
+  // 开始界面：未进桌之前不渲染牌桌与顶部标签栏，
+  // 避免「还没开始就能点到设置/统计」的错位感。
+  if (!entered) {
+    return (
+      <div className={`app ${snap.settings.fourColorDeck ? '' : 'two-color'}`}>
+        <StartScreen onStart={() => setEntered(true)} />
+      </div>
+    );
+  }
 
   return (
     <div className={`app ${snap.settings.fourColorDeck ? '' : 'two-color'}`}>
@@ -213,12 +272,20 @@ export function App() {
             </div>
           ) : (
             <div className="table-wrap">
-              <TableView state={snap.state} heroSeat={controller.heroSeat} revealAll={false} />
+              <TableView
+                state={snap.state}
+                heroSeat={controller.heroSeat}
+                revealAll={false}
+                view={table.view}
+              />
               <ActionBar
                 legal={snap.legal}
                 pot={pot}
                 bigBlind={snap.settings.bigBlind}
                 heroTurn={snap.heroTurn}
+                heroTurnActive={table.view.canHeroAct}
+                waiting={table.view.thinking}
+                settleHold={Boolean(snap.state.finished && !table.view.settled)}
                 finished={snap.state.finished}
                 hint={snap.hint}
                 hintLoading={hintLoading}
@@ -230,7 +297,7 @@ export function App() {
             </div>
           )}
 
-          {snap.state?.finished && (
+          {snap.state?.finished && table.view.settled && (
             <div className="panel" style={{ marginTop: 16 }}>
               <h2>本手结果</h2>
               <div className="stats-grid">

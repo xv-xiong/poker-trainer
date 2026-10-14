@@ -1,58 +1,10 @@
 /* ============================================================
-   设计令牌：现代数据风（深色底 + 高对比强调色 + 数据可视化）
-   四色牌方案：黑桃黑 / 红桃红 / 方块蓝 / 梅花绿
+   组件样式：全部取值来自 tokens.css（风格令牌层）。
+   ------------------------------------------------------------
+   视觉基线：参考站实测风格（深绿底 + 金色主色 + 绿绒牌桌 +
+   米白扑克牌）。令牌定义见 ./tokens.css，本文件只做「谁用哪个令牌」。
+   牌面四色方案：黑桃黑 / 红桃红 / 方块蓝 / 梅花绿（可切传统两色）。
    ============================================================ */
-
-:root {
-  /* 底色层次 */
-  --bg-0: #0b0e14;
-  --bg-1: #111722;
-  --bg-2: #18202e;
-  --bg-3: #1f2a3c;
-  --line: #263349;
-  --line-soft: #1c2636;
-
-  /* 文字 */
-  --fg-0: #eef3fb;
-  --fg-1: #a8b6cc;
-  --fg-2: #6f7f99;
-
-  /* 强调色（数据风：青绿主色 + 琥珀警示 + 品红偏离） */
-  --accent: #2ee6a8;
-  --accent-dim: #1a9e73;
-  --accent-soft: rgba(46, 230, 168, 0.12);
-  --warn: #ffb020;
-  --warn-soft: rgba(255, 176, 32, 0.14);
-  --danger: #ff5d7a;
-  --danger-soft: rgba(255, 93, 122, 0.14);
-  --info: #57a6ff;
-
-  /* 牌面四色 */
-  --suit-spade: #e8eef8;
-  --suit-heart: #ff5d6c;
-  --suit-diamond: #4ea8ff;
-  --suit-club: #35d07f;
-
-  /* 传统两色（设置可切） */
-  --suit-red-2color: #ff5d6c;
-
-  /* 牌桌 */
-  --felt: radial-gradient(ellipse at 50% 42%, #16324a 0%, #0e1c2b 62%, #0a141f 100%);
-  --felt-edge: #2b4560;
-
-  /* 尺寸 */
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 16px;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 6px 24px rgba(0, 0, 0, 0.45);
-  --shadow-glow: 0 0 0 1px rgba(46, 230, 168, 0.35), 0 0 22px rgba(46, 230, 168, 0.16);
-
-  --font-ui: 'Inter', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  --font-num: 'JetBrains Mono', 'SF Mono', 'Cascadia Mono', Consolas, monospace;
-
-  --mono-tabular: tabular-nums;
-}
 
 * {
   box-sizing: border-box;
@@ -74,42 +26,46 @@ body {
   min-height: 100vh;
 }
 
+/* ---------- 通用控件（button / input / select） ---------- */
+
 button {
-  font-family: inherit;
-  font-size: inherit;
+  font: inherit;
   cursor: pointer;
-  border: 1px solid var(--line);
+  color: inherit;
+  border: 1px solid var(--line-strong);
   background: var(--bg-2);
   color: var(--fg-0);
-  border-radius: var(--radius-sm);
-  padding: 8px 14px;
-  transition: background 0.14s ease, border-color 0.14s ease, transform 0.08s ease;
+  border-radius: var(--radius);
+  padding: 10px 15px;
+  font-size: 13px;
+  transition: background var(--t-btn), transform var(--t-btn), box-shadow var(--t-btn),
+    border-color var(--t-btn);
 }
 
 button:hover:not(:disabled) {
   background: var(--bg-3);
-  border-color: var(--accent-dim);
 }
 
-button:active:not(:disabled) {
-  transform: translateY(1px);
+/* 按压缩放：给点击一个「按下去」的触觉反馈（参考站 motion 同款） */
+button:not(:disabled):active {
+  transform: scale(0.96);
 }
 
 button:disabled {
-  opacity: 0.42;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #06231a;
-  font-weight: 650;
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--gold-text);
+  font-weight: 750;
 }
 
 button.primary:hover:not(:disabled) {
-  background: #4df0bb;
-  border-color: #4df0bb;
+  background: var(--gold);
+  box-shadow: 0 4px 18px rgba(231, 193, 131, 0.15);
 }
 
 button.danger {
@@ -120,27 +76,36 @@ button.danger {
 
 button.ghost {
   background: transparent;
-  border-color: var(--line);
+  border-color: var(--line-strong);
   color: var(--fg-1);
+}
+
+button.ghost:hover:not(:disabled) {
+  background: var(--bg-2);
 }
 
 input,
 select {
-  font-family: inherit;
-  font-size: inherit;
+  font: inherit;
   background: var(--bg-1);
   color: var(--fg-0);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 9px 12px;
 }
 
-/* ---------- 布局 ---------- */
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+/* ---------- 布局骨架 ---------- */
 
 .app {
-  max-width: 1360px;
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 16px 20px 48px;
+  padding: 0 20px 48px;
 }
 
 .topbar {
@@ -149,7 +114,8 @@ select {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  padding-bottom: 14px;
+  min-height: var(--header-h);
+  padding: 12px 0;
   border-bottom: 1px solid var(--line-soft);
   margin-bottom: 18px;
 }
@@ -163,7 +129,7 @@ select {
 .brand h1 {
   font-size: 19px;
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.01em;
 }
 
 .brand .sub {
@@ -173,23 +139,29 @@ select {
 
 .tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   flex-wrap: wrap;
 }
 
 .tab {
-  padding: 7px 13px;
-  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--fg-1);
-  font-size: 14px;
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+.tab:hover:not(:disabled) {
+  background: transparent;
+  color: var(--fg-0);
 }
 
 .tab.active {
-  background: var(--accent-soft);
-  border-color: var(--accent-dim);
-  color: var(--accent);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: inset 0 -2px 0 var(--gold);
+  color: var(--gold);
   font-weight: 600;
 }
 
@@ -204,13 +176,233 @@ select {
 .bankroll .amount {
   font-size: 19px;
   font-weight: 650;
+  color: var(--gold);
 }
 
 .bankroll .delta.up {
-  color: var(--accent);
+  color: var(--win);
 }
 .bankroll .delta.down {
   color: var(--danger);
+}
+
+/* ---------- 开始界面（Start Screen / Lobby） ----------
+   结构对齐参考站首页：左栏定位文案 + 装饰牌，右栏操作卡片。
+   参考站的房间号 / 密码 / 邀请链接不适用（单人本地练习台），故不搬。 */
+
+.lobby {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 56px 0 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 430px;
+  gap: 72px;
+  align-items: start;
+}
+
+.lobby-intro {
+  position: relative;
+  padding-top: 16px;
+}
+
+/* 眉毛字（eyebrow）：小号 + 宽字距 + 金色，用于分区提示 */
+.eyebrow {
+  margin: 0;
+  font-size: var(--fs-eyebrow);
+  letter-spacing: var(--ls-eyebrow);
+  color: var(--gold);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.lobby-intro h1 {
+  font-size: var(--fs-display);
+  letter-spacing: var(--ls-display);
+  line-height: 1.15;
+  font-weight: 600;
+  margin: 26px 0 24px;
+  color: var(--fg-0);
+}
+
+.lobby-lede {
+  color: var(--fg-1);
+  font-size: 17px;
+  line-height: 1.9;
+  margin: 0;
+}
+
+.deck-decor {
+  display: flex;
+  gap: 12px;
+  margin: 38px 0;
+}
+
+/* 装饰牌：放大约 1.7 倍并轻微旋转，纯视觉，不参与对局 */
+.deck-decor .card {
+  width: 85px;
+  height: 119px;
+  font-size: 35px;
+  padding: 9px 12px;
+  transform: rotate(-12deg);
+}
+
+.deck-decor .card:last-child {
+  transform: rotate(10deg) translateY(8px);
+}
+
+.deck-decor .card .rank {
+  font-size: 35px;
+}
+.deck-decor .card .suit {
+  font-size: 30px;
+}
+
+.lobby-foot {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--fg-2);
+  margin: 0;
+}
+
+.lobby-foot i {
+  font-style: normal;
+  padding: 0 10px;
+  color: var(--gold);
+}
+
+/* 右栏操作卡片 */
+.lobby-entry h2 {
+  font-size: 23px;
+  margin: 14px 0 24px;
+  letter-spacing: -0.01em;
+}
+
+.lobby-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.fact {
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.fact dt {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--fg-2);
+  text-transform: uppercase;
+}
+
+.fact dd {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-family: var(--font-num);
+  font-variant-numeric: var(--mono-tabular);
+  color: var(--fg-0);
+}
+
+.fact dd .muted {
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.lobby-record {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.rock {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rock .rk {
+  font-size: 11px;
+  color: var(--fg-2);
+}
+
+.rock .rv {
+  font-family: var(--font-num);
+  font-variant-numeric: var(--mono-tabular);
+  font-size: 20px;
+  font-weight: 650;
+  color: var(--gold);
+}
+
+.rock .rv.pos {
+  color: var(--win);
+}
+.rock .rv.neg {
+  color: var(--danger);
+}
+
+.lobby-record-note {
+  margin: 12px 0 18px;
+}
+
+.lobby-start {
+  width: 100%;
+  padding: 13px 18px;
+  font-size: 14px;
+}
+
+.lobby-hint {
+  margin: 10px 0 0;
+}
+
+.lobby-rules {
+  margin-top: 18px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 14px;
+}
+
+.lobby-rules summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg-1);
+  letter-spacing: 0.04em;
+}
+
+.lobby-rules summary:hover {
+  color: var(--gold);
+}
+
+.lobby-rules ul {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.lobby-rules li {
+  display: grid;
+  gap: 2px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.lobby-rules li strong {
+  color: var(--fg-0);
+  font-weight: 600;
+}
+
+.lobby-rules li span {
+  color: var(--fg-2);
+}
+
+.lobby-rules .muted {
+  margin: 12px 0 0;
 }
 
 /* ---------- 牌桌 ---------- */
@@ -223,14 +415,15 @@ select {
   align-items: start;
 }
 
+/* 绿绒桌面：径向渐变（radial-gradient）+ 双层描边 + 深投影 */
 .felt {
   position: relative;
   background: var(--felt);
-  border: 2px solid var(--felt-edge);
-  border-radius: 180px / 120px;
+  border: var(--felt-border-width) solid var(--felt-border);
+  border-radius: 180px;
   min-height: 470px;
-  padding: 26px 30px;
-  box-shadow: var(--shadow-2), inset 0 0 70px rgba(0, 0, 0, 0.42);
+  padding: 30px 34px;
+  box-shadow: inset 0 0 0 2px var(--felt-ring), var(--felt-shadow);
   display: grid;
   grid-template-areas:
     'top top top'
@@ -238,7 +431,7 @@ select {
     'bottom bottom bottom';
   grid-template-columns: 1fr auto 1fr;
   grid-template-rows: auto 1fr auto;
-  gap: 10px;
+  gap: 12px;
 }
 
 .table-center {
@@ -251,23 +444,30 @@ select {
   min-width: 260px;
 }
 
+/* 底池胶囊：圆角胶囊 + 暗金描边 */
 .pot-display {
-  text-align: center;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  border-radius: var(--radius-pill);
+  padding: 7px 18px;
+  color: var(--pill-fg);
 }
 
 .pot-display .label {
   font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
   color: var(--fg-2);
+  letter-spacing: 0.02em;
 }
 
 .pot-display .value {
   font-family: var(--font-num);
-  font-size: 27px;
+  font-size: 24px;
   font-weight: 650;
   font-variant-numeric: var(--mono-tabular);
-  color: var(--accent);
+  color: var(--gold);
 }
 
 .board {
@@ -278,11 +478,12 @@ select {
 }
 
 .board .placeholder {
-  width: 54px;
-  height: 76px;
-  border: 1px dashed var(--line);
+  width: 49px;
+  height: 69px;
+  border: 1px solid rgba(125, 156, 106, 0.35);
   border-radius: var(--radius-sm);
-  opacity: 0.5;
+  background: var(--bg-1);
+  opacity: 0.9;
 }
 
 .street-badge {
@@ -291,22 +492,26 @@ select {
   letter-spacing: 0.05em;
 }
 
-/* ---------- 牌 ---------- */
+/* ---------- 扑克牌 ----------
+   牌背 / 牌面 / 花色字色全部走令牌。
+
+   注意：花色类名（suit-spade 等）由 CardView 输出，本任务不改组件，
+   只在这里把颜色收到变量上；两色模式靠祖先 .two-color 覆盖。 */
 
 .card {
-  width: 54px;
-  height: 76px;
+  width: 49px;
+  height: 69px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(170deg, #fdfefe 0%, #e6ecf5 100%);
-  border: 1px solid #b9c6d8;
-  box-shadow: var(--shadow-1);
+  background: var(--card-face);
+  color: var(--card-ink);
+  font-size: 22px;
+  font-weight: 750;
+  padding: 5px 7px;
+  box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
+  justify-content: space-between;
   font-family: var(--font-num);
-  font-weight: 700;
   user-select: none;
   flex: 0 0 auto;
 }
@@ -314,57 +519,59 @@ select {
 .card.small {
   width: 38px;
   height: 54px;
-  font-size: 12px;
+  font-size: 15px;
+  padding: 4px 5px;
 }
 
 .card .rank {
   font-size: 20px;
   line-height: 1;
+  text-align: left;
 }
 
 .card.small .rank {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .card .suit {
   font-size: 17px;
   line-height: 1;
+  align-self: flex-end;
 }
 
 .card.small .suit {
-  font-size: 12px;
+  font-size: 13px;
 }
 
+/* 四色牌（默认）：黑桃黑 / 红桃红 / 方块蓝 / 梅花绿 */
 .card.suit-spade {
-  color: #10151d;
+  color: var(--suit-spade);
 }
 .card.suit-heart {
-  color: #d81f36;
+  color: var(--suit-heart);
 }
 .card.suit-diamond {
-  color: #1668d6;
+  color: var(--suit-diamond);
 }
 .card.suit-club {
-  color: #128a4d;
+  color: var(--suit-club);
 }
 
-/* 传统两色：方块变红、梅花变黑 */
+/* 传统两色：方块变红、梅花变黑（与参考站的 .playing-card.red 同观感） */
 .two-color .card.suit-diamond {
-  color: #d81f36;
+  color: var(--suit-red-2color);
 }
 .two-color .card.suit-club {
-  color: #10151d;
+  color: var(--suit-black-2color);
 }
 
-.card.back {
-  background: repeating-linear-gradient(45deg, #1d3350 0 6px, #16283d 6px 12px);
-  background-color: #16283d;
-  border-color: #2a425c;
-}
-
+/* 牌背与未公开的底牌：斜纹 + 浅描边 */
+.card.back,
 .card.hidden {
-  background: repeating-linear-gradient(45deg, #1a2c42 0 6px, #142336 6px 12px);
-  border-color: #2a425c;
+  background: var(--card-back);
+  background-color: #22433c;
+  border: 2px solid var(--card-back-border);
+  box-shadow: none;
 }
 
 .card.dim {
@@ -372,36 +579,56 @@ select {
   filter: saturate(0.4);
 }
 
+/* 赢牌高亮：金色描边 + 外发光 */
 .card.winning {
-  box-shadow: var(--shadow-glow);
-  border-color: var(--accent);
+  outline: 3px solid var(--win-outline);
+  box-shadow: var(--win-glow);
+}
+
+.card.placeholder {
+  background: transparent;
+  border: 1px solid rgba(125, 156, 106, 0.35);
+  box-shadow: none;
 }
 
 /* ---------- 座位 ---------- */
 
 .seat {
-  background: var(--bg-1);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  background: var(--seat-bg);
+  border: 1px solid var(--seat-border);
+  border-radius: var(--radius-md);
   padding: 9px 11px;
   min-width: 150px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--seat-shadow);
+  transition: border-color 0.25s, box-shadow 0.25s, opacity var(--t-fade);
 }
 
+/* 当前行动座位：金色描边 + 呼吸光晕（turn-glow） */
 .seat.active {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-glow);
+  border-color: var(--gold);
+  animation: turn-glow 2s ease-in-out infinite;
+}
+
+/* 赢家座位：金色描边 + 略亮的底 */
+.seat.winner {
+  border-color: var(--gold);
+  background: #2b3d2c;
 }
 
 .seat.folded {
   opacity: 0.46;
 }
 
+.seat.folded .seat-cards {
+  opacity: 0.35;
+}
+
 .seat.hero {
-  background: linear-gradient(180deg, rgba(46, 230, 168, 0.09), var(--bg-1));
+  background: #172a22;
+  border-color: var(--gold-dim);
 }
 
 .seat .seat-head {
@@ -412,7 +639,7 @@ select {
 }
 
 .seat .name {
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -423,12 +650,13 @@ select {
   font-family: var(--font-num);
   font-size: 13.5px;
   font-variant-numeric: var(--mono-tabular);
-  color: var(--fg-1);
+  color: var(--gold);
 }
 
 .seat .seat-cards {
   display: flex;
   gap: 4px;
+  transition: opacity var(--t-fade);
 }
 
 .seat .badges {
@@ -440,24 +668,24 @@ select {
 .badge {
   font-size: 10.5px;
   padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-soft);
   color: var(--fg-2);
   letter-spacing: 0.03em;
 }
 
 .badge.dealer {
-  background: #fff;
-  color: #111;
-  border-color: #fff;
+  background: var(--card-face);
+  color: var(--gold-text);
+  border-color: var(--card-face);
   font-weight: 700;
 }
 
 .badge.sb,
 .badge.bb {
-  background: var(--warn-soft);
-  color: var(--warn);
-  border-color: var(--warn);
+  background: var(--gold-soft);
+  color: var(--gold);
+  border-color: var(--gold-dim);
 }
 
 .badge.folded {
@@ -468,19 +696,25 @@ select {
 
 .badge.allin {
   background: var(--danger);
-  color: #2a0009;
+  color: #2a1310;
   border-color: var(--danger);
   font-weight: 700;
 }
 
 .badge.tier {
-  background: var(--bg-3);
+  background: var(--bg-1);
 }
 
 .seat .committed {
+  display: inline-block;
+  align-self: flex-start;
   font-family: var(--font-num);
-  font-size: 12px;
-  color: var(--warn);
+  font-size: 11px;
+  color: var(--pill-fg);
+  background: var(--pill-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 1px 7px;
   font-variant-numeric: var(--mono-tabular);
 }
 
@@ -514,10 +748,10 @@ select {
 /* ---------- 操作区 ---------- */
 
 .action-panel {
-  background: var(--bg-1);
+  background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 14px;
+  border-radius: var(--radius-lg);
+  padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -525,9 +759,15 @@ select {
   top: 16px;
 }
 
+/* 轮到自己行动时，操作区描边转金色并微微发光 */
+.action-panel.my-turn {
+  border-color: var(--gold-dim);
+  box-shadow: 0 0 20px rgba(231, 193, 131, 0.07);
+}
+
 .action-panel h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--fg-1);
   font-weight: 600;
 }
@@ -547,7 +787,7 @@ select {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid var(--line-soft);
 }
 
@@ -560,7 +800,9 @@ select {
 .raise-box input[type='range'] {
   flex: 1;
   padding: 0;
-  accent-color: var(--accent);
+  border: 0;
+  background: transparent;
+  accent-color: var(--gold);
 }
 
 .raise-box .amount {
@@ -569,6 +811,7 @@ select {
   min-width: 62px;
   text-align: right;
   font-weight: 650;
+  color: var(--gold);
 }
 
 .quick-sizes {
@@ -578,14 +821,14 @@ select {
 
 .quick-sizes button {
   flex: 1;
-  padding: 5px 4px;
-  font-size: 12px;
+  padding: 8px 4px;
+  font-size: 11px;
 }
 
 .hint-box {
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-dim);
-  border-radius: var(--radius-sm);
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius);
   padding: 10px;
   font-size: 13px;
   display: flex;
@@ -607,6 +850,7 @@ select {
   font-family: var(--font-num);
   font-variant-numeric: var(--mono-tabular);
   font-weight: 650;
+  color: var(--gold);
 }
 
 .keyhints {
@@ -618,8 +862,8 @@ select {
 }
 
 kbd {
-  background: var(--bg-3);
-  border: 1px solid var(--line);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
   border-bottom-width: 2px;
   border-radius: 4px;
   padding: 0 5px;
@@ -631,7 +875,7 @@ kbd {
 
 .bar {
   height: 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-3);
   overflow: hidden;
 }
@@ -639,8 +883,8 @@ kbd {
 .bar > span {
   display: block;
   height: 100%;
-  border-radius: 999px;
-  background: var(--accent);
+  border-radius: var(--radius-pill);
+  background: var(--gold);
   transition: width 0.25s ease;
 }
 
@@ -655,21 +899,26 @@ kbd {
 /* ---------- 面板通用 ---------- */
 
 .panel {
-  background: var(--bg-1);
+  background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: 22px;
   margin-bottom: 16px;
+}
+
+/* 开始界面右栏卡片需要更厚的竖向留白 */
+.panel-wide {
+  padding: 28px 26px;
 }
 
 .panel h2 {
   margin: 0 0 12px;
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .panel h3 {
   margin: 16px 0 8px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--fg-1);
 }
 
@@ -677,7 +926,7 @@ kbd {
   background: var(--warn-soft);
   border: 1px solid var(--warn);
   color: #ffd98a;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 10px 12px;
   margin-bottom: 12px;
   font-size: 13px;
@@ -694,9 +943,9 @@ kbd {
 }
 
 .stat {
-  background: var(--bg-2);
+  background: var(--bg-1);
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 11px 12px;
 }
 
@@ -715,7 +964,7 @@ kbd {
 }
 
 .stat .v.pos {
-  color: var(--accent);
+  color: var(--win);
 }
 .stat .v.neg {
   color: var(--danger);
@@ -758,14 +1007,14 @@ tr.grade-major td {
 .tag {
   font-size: 11px;
   padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-soft);
   color: var(--fg-1);
 }
 
 .tag.ok {
-  border-color: var(--accent-dim);
-  color: var(--accent);
+  border-color: var(--gold-dim);
+  color: var(--gold);
 }
 .tag.review {
   border-color: var(--warn);
@@ -810,6 +1059,13 @@ tr.grade-major td {
   border-bottom: 1px solid var(--line-soft);
 }
 
+.settings-row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--gold);
+  padding: 0;
+}
+
 /* 牌面组：卡片必须相邻排列。
    注意：若把 CardRow 直接放进 .settings-row（space-between 的 flex 容器），
    每张牌会成为独立的 flex 子项并被均匀撑开，视觉上像散落的牌。
@@ -844,7 +1100,42 @@ tr.grade-major td {
   font-size: 12.5px;
 }
 
-/* ---------- 响应式：手机竖屏 ---------- */
+/* ---------- 动效（与 tokens.css 的时长令牌配套） ---------- */
+
+@keyframes turn-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(231, 193, 131, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(231, 193, 131, 0.4);
+  }
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 面板 / 弹出内容入场 */
+.panel,
+.action-panel {
+  animation: panel-enter 0.25s ease-out;
+}
+
+/* ---------- 响应式：窄屏与手机竖屏 ---------- */
+
+@media (max-width: 1100px) {
+  .lobby {
+    gap: 36px;
+  }
+}
 
 @media (max-width: 900px) {
   .table-wrap {
@@ -868,24 +1159,32 @@ tr.grade-major td {
   }
 
   .app {
-    padding: 12px 12px 62vh;
+    padding: 0 12px 62vh;
+  }
+
+  .lobby {
+    grid-template-columns: 1fr;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 28px 0;
+    gap: 26px;
+  }
+
+  .lobby-intro h1 {
+    font-size: 44px;
+    letter-spacing: -2px;
+    margin: 18px 0 16px;
+  }
+
+  .deck-decor {
+    display: none;
   }
 
   .felt {
-    border-radius: 90px / 60px;
+    border-radius: 90px;
+    border-width: 6px;
     min-height: 380px;
-    padding: 16px 14px;
-  }
-
-  .card {
-    width: 44px;
-    height: 62px;
-  }
-  .card .rank {
-    font-size: 16px;
-  }
-  .card .suit {
-    font-size: 14px;
+    padding: 18px 16px;
   }
 
   .seat {
@@ -902,7 +1201,7 @@ tr.grade-major td {
   }
 
   .pot-display .value {
-    font-size: 22px;
+    font-size: 20px;
   }
 }
 
@@ -912,20 +1211,31 @@ tr.grade-major td {
   }
   .felt {
     min-height: 330px;
+    border-radius: 120px;
+  }
+  .board .card,
+  .board .card.placeholder {
+    width: 35px;
+    height: 51px;
+  }
+  .board .card .rank {
+    font-size: 16px;
+  }
+  .board .card .suit {
+    font-size: 14px;
+  }
+  .lobby-intro h1 {
+    font-size: 36px;
+    letter-spacing: -1.5px;
+  }
+  .lobby-record {
+    grid-template-columns: 1fr 1fr;
   }
 }
 
-/* 尊重「减少动态效果」偏好（WCAG 2.2） */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
-    animation: none !important;
-  }
-}
-
-/* 键盘焦点可见性（WCAG 2.2 焦点外观） */
+/* 键盘焦点可见性（WCAG 2.2 · 2.4.11 Focus Appearance） */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
 

@@ -1,5 +1,14 @@
 /**
  * 操作区：动作按钮、加注滑杆与快捷尺度、提示面板、快捷键提示。
+ *
+ * 演出接入（task-4）：
+ *   - `heroTurnActive`：把「演出中的禁用」（AI 思考中 / 公共牌还没发完 /
+ *     自己的动作气泡还没退场）算进去。**必须用它，而不是 controller 的
+ *     `heroTurn`**——后者在 AI 交回行动的同一帧就为 true，但画面上 AI 的动作
+ *     还没演完，此时放行点击会造成「动作被动画吞掉」的误操作。
+ *   - `waiting`：AI 思考 / 发牌中，显示等待态（而不是「轮到你」的按钮）。
+ *   - 禁用只作用于按钮与快捷键；`onAct` 的结果仍由 controller 判定，
+ *     因此即使禁用被绕过也不会改变对局结果。
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -18,6 +27,10 @@ export function ActionBar({
   onAct,
   onHint,
   onNextHand,
+  heroTurnActive,
+  waiting = false,
+  waitingLabel = '对手正在行动（AI 思考中）…',
+  settleHold = false,
 }: {
   legal: LegalActions | null;
   pot: number;
@@ -30,7 +43,15 @@ export function ActionBar({
   onAct: (type: ActionType, toAmount?: number) => void;
   onHint: () => void;
   onNextHand: () => void;
+  /** 演出后**真正**可行动；不传则退化为 controller 的 `heroTurn`。 */
+  heroTurnActive?: boolean;
+  /** 是否处于「演出中」（AI 思考 / 发牌中 / 自己的气泡停留中）。 */
+  waiting?: boolean;
+  waitingLabel?: string;
+  /** 本手是否已结束但仍在结算停顿中（此时不显示「下一手」，避免连点）。 */
+  settleHold?: boolean;
 }) {
+  const canAct = heroTurnActive ?? heroTurn;
   const minRaise = legal?.minRaiseTo ?? 0;
   const maxRaise = legal?.maxRaiseTo ?? 0;
   const [raiseTo, setRaiseTo] = useState(minRaise);
@@ -57,8 +78,10 @@ export function ActionBar({
   }, [legal, pot, minRaise, maxRaise]);
 
   // 快捷键（桌面端）
+  // 依赖里必须带 `canAct`：演出期间（canAct=false）不得响应任何动作快捷键，
+  // 否则玩家能在 AI 还在演的时候用键盘抢先出牌。
   useEffect(() => {
-    if (!heroTurn || !legal) return;
+    if (!canAct || !legal || waiting) return;
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
@@ -80,25 +103,47 @@ export function ActionBar({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [heroTurn, legal, raiseTo, onAct]);
+  }, [canAct, waiting, legal, raiseTo, onAct]);
 
   if (finished) {
     return (
-      <div className="action-panel">
+      <div className={`action-panel ${settleHold ? 'sc-waiting' : 'sc-my-turn'}`}>
         <h3>本手已结束</h3>
-        <button className="primary" onClick={onNextHand}>
-          下一手（Next Hand）
-        </button>
-        <div className="keyhints">按 <kbd>N</kbd> 也可开始下一手</div>
+        {settleHold ? (
+          <div className="muted small">结算中…</div>
+        ) : (
+          <button className="primary" onClick={onNextHand}>
+            下一手（Next Hand）
+          </button>
+        )}
+        {!settleHold && (
+          <div className="keyhints">
+            按 <kbd>N</kbd> 也可开始下一手
+          </div>
+        )}
       </div>
     );
   }
 
-  if (!heroTurn) {
+  if (!canAct) {
     return (
-      <div className="action-panel">
-        <h3>等待中</h3>
-        <div className="muted small">对手正在行动（AI 思考中）…</div>
+      <div className="action-panel sc-waiting" data-testid="action-waiting">
+        <h3>{waiting ? '等待中' : '你的行动'}</h3>
+        <div className="muted small">{waiting ? waitingLabel : '动作确认中…'}</div>
+        <div className="sc-waiting-bar" aria-hidden="true">
+          <span />
+        </div>
+        {/* 保留按钮结构但全部禁用：一方面让「稍后就能点」可预期，
+            另一方面避免布局在等待/行动之间跳动 */}
+        <div className="action-row">
+          <button className="danger" disabled>
+            弃牌（Fold）
+          </button>
+          <button className="primary" disabled>
+            跟注 / 过牌（Call / Check）
+          </button>
+        </div>
+        <div className="keyhints muted small">演出进行中，动作按钮已暂时禁用</div>
       </div>
     );
   }
@@ -109,7 +154,7 @@ export function ActionBar({
     : `${ACTION_LABELS.call.zh}（Call） ${legal?.callAmount ?? 0}`;
 
   return (
-    <div className="action-panel">
+    <div className="action-panel sc-my-turn" data-testid="action-my-turn">
       <h3>你的行动</h3>
 
       <div className="action-row">

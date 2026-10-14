@@ -305,6 +305,22 @@ export class GameController {
     return finished;
   }
 
+  /**
+   * 分步演出的收尾钩子：在一次「单步」AI 动作之后同步对外状态。
+   *
+   * 为什么需要它：`runAI()` 的 while 循环里除了推进 AI，还夹着两件必须发生的事——
+   * 每轮 `emit()` 通知订阅者，以及本手结束时调 `finalizeHand()`（复盘 / 落库 / 统计 / 推进庄家）。
+   * 改成「一次只推一名 AI」的分步演出后，这两件事就没人做了：
+   * 不 emit 则界面不动，不 finalize 则这一手不落库、统计不更新。
+   *
+   * 本方法**只做这两件事**，不推进任何 AI、不修改任何对局数据，
+   * 因此不会影响金额与结算结果（符合「动画不得影响结算准确性」约束）。
+   */
+  settleAfterAiStep(): void {
+    if (this.state?.finished) this.finalizeHand();
+    this.emit();
+  }
+
   /** 一手结束后的收尾：复盘、落库、更新统计、推进庄家。 */
   private finalizeHand(): void {
     const st = this.state;

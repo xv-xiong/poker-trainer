@@ -11,7 +11,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 90_000,
+  // 180s：分步演出让每个 AI 动作带约 560ms 思考停顿，一手 6 人牌的墙钟时间
+  // 显著长于「一次跑完」的旧实现；90s 在机器繁忙时会误判超时（实测复现）。
+  // 但这只影响「打完整一手」的用例，其余用例仍远小于此值。
+  timeout: 180_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
