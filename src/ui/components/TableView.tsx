@@ -18,10 +18,9 @@ import type { ShowcaseView } from '../useTableShowcase.js';
 import { seatRoles } from '../../core/pot.js';
 import { STREET_LABELS, type HandState } from '../../core/types.js';
 
-/** 座位在牌桌上的位置（百分比坐标）与紧凑模式。 */
+/** 座位在牌桌上的位置（百分比坐标）。 */
 export interface SeatPlacement {
   index: number;
-  compact: boolean;
   x: number;
   y: number;
 }
@@ -33,47 +32,73 @@ export const POT_CENTER = { x: 50, y: 46 };
  * 计算座位坐标。
  *
  * 为什么用百分比而不是 `grid-template-areas`：座位在牌桌上是**环绕**排布的，
- * 网格的四个角落位置无法表达「3 个在顶部、左右各一、玩家在底部居中」这种
+ * 网格的四个角落位置无法表达「顶部若干、左右各一、玩家在底部居中」这种
  * 随人数变化的环绕关系；一旦人数可变，坐标表比分格更直接。
  * 百分比还有一个好处：响应式重排后飞筹码的起止点自动跟随，无需监听 resize。
  *
- * 坐标刻意保持左右对称，使桌面上任何人数下玩家（底部居中）到各座位的
- * 视觉距离都与真实牌桌一致。
+ * ── 顺时针不变式（本函数的核心约束）──────────────────────────
+ * 引擎的行动顺序是 `(seat + 1) % seatCount`（见 `core/betting.ts` 的
+ * `nextActionableSeat` / `findNextActor`）。为了让玩家**看到的**行动光晕
+ * 与这个顺序一致，座位的排布必须满足：
+ *
+ *     从玩家座位出发、沿屏幕顺时针读，座次恰好是
+ *     hero → hero+1 → hero+2 → … → hero+n-1
+ *
+ * 屏幕坐标 y 向下，所以「顺时针」= 下 → 左 → 上 → 右。
+ * 因此槽位的顺时针次序固定为：**左侧 → 顶排(从左到右) → 右侧**，
+ * 玩家自己在底部居中。
+ *
+ * 早前的实现把 hero+1…hero+3 铺在顶排、hero+4 放左侧、hero+5 放右侧，
+ * 于是视觉顺时针顺序变成 `[hero, hero+4, hero+1, hero+2, hero+3, hero+5]`
+ * ——行动光晕在「顶排三连」之后突然跳到左边、再跳回右边，主观感受就是
+ * 「AI 在随机行动」。现在按顺时针槽位顺序分配座次，从根上消除该错位。
+ *
+ * 注意：这里**没有** `compact` 字段。早前左侧/右侧座位被标为 compact，
+ * 而 `SeatView` 用 `{!compact && …}` 决定是否渲染底牌，导致六人桌恰好
+ * 有两名 AI（左右两侧）完全不显示手牌。槽位大小由 CSS 负责，不能用来
+ * 决定「是否渲染底牌」。
  */
 export function computePlacements(seatCount: number, heroSeat: number): SeatPlacement[] {
   const out: SeatPlacement[] = [];
   const n = Math.max(2, seatCount);
 
   if (n === 2) {
-    out.push({ index: (heroSeat + 1) % n, compact: false, x: 50, y: 10 });
-    out.push({ index: heroSeat, compact: false, x: 50, y: 90 });
+    // 单挑：对手在正上方（从玩家出发顺时针的唯一位置）
+    out.push({ index: (heroSeat + 1) % n, x: 50, y: 10 });
+    out.push({ index: heroSeat, x: 50, y: 90 });
     return out;
   }
 
   if (n === 3) {
-    out.push({ index: (heroSeat + 1) % n, compact: false, x: 22, y: 14 });
-    out.push({ index: (heroSeat + 2) % n, compact: false, x: 78, y: 14 });
-    out.push({ index: heroSeat, compact: false, x: 50, y: 90 });
+    // 3 人：顺时针为 下(玩家) → 左 → 右
+    out.push({ index: (heroSeat + 1) % n, x: 22, y: 14 });
+    out.push({ index: (heroSeat + 2) % n, x: 78, y: 14 });
+    out.push({ index: heroSeat, x: 50, y: 90 });
     return out;
   }
 
+  // 4 人及以上：按「左侧 → 顶排 → 右侧」的顺时针槽位顺序分配座次。
   const others: number[] = [];
   for (let i = 1; i < n; i++) others.push((heroSeat + i) % n);
 
-  const topCount = Math.min(3, others.length - 2);
-  const top = others.slice(0, topCount);
-  const rest = others.slice(topCount);
-  const left = rest.length > 0 ? rest[0] : null;
-  const right = rest.length > 1 ? rest[rest.length - 1] : null;
-  const middle = rest.length > 2 ? rest.slice(1, rest.length - 1) : [];
+  // 顶排座位数：其余分给左右两侧（各 1 个）。保持与旧布局相同的视觉密度。
+  const topCount = others.length - 2;
+  const leftSeat = others[0];
+  const topSeats = others.slice(1, 1 + topCount);
+  const rightSeat = others[topCount + 1];
 
-  const topRow = [...top, ...middle];
-  topRow.forEach((idx, i) => {
-    out.push({ index: idx, compact: topRow.length > 3, x: ((i + 1) / (topRow.length + 1)) * 100, y: 10 });
+  // 左侧（顺时针第一个）：y 取中部偏下，视觉上紧跟玩家之后
+  out.push({ index: leftSeat, x: 7, y: 46 });
+
+  // 顶排：从左到右均匀铺开，正好对应顺时针的中间段
+  topSeats.forEach((idx, i) => {
+    out.push({ index: idx, x: ((i + 1) / (topSeats.length + 1)) * 100, y: 10 });
   });
-  if (left !== null) out.push({ index: left, compact: true, x: 7, y: 48 });
-  if (right !== null) out.push({ index: right, compact: true, x: 93, y: 48 });
-  out.push({ index: heroSeat, compact: false, x: 50, y: 90 });
+
+  // 右侧（顺时针最后一个）
+  if (rightSeat !== undefined) out.push({ index: rightSeat, x: 93, y: 46 });
+
+  out.push({ index: heroSeat, x: 50, y: 90 });
   return out;
 }
 
@@ -96,7 +121,7 @@ export function TableView({
 
   const placements = useMemo(() => computePlacements(n, heroSeat), [n, heroSeat]);
   const placement = (idx: number): SeatPlacement =>
-    placements.find((p) => p.index === idx) ?? { index: idx, compact: false, x: 50, y: 50 };
+    placements.find((p) => p.index === idx) ?? { index: idx, x: 50, y: 50 };
 
   const others = placements.filter((p) => p.index !== heroSeat);
   const topRow = others.filter((p) => p.y < 30);
@@ -110,7 +135,7 @@ export function TableView({
   const handOver = view ? view.handOver : state.finished;
   const lastAction = view?.lastAction ?? null;
 
-  const renderSeat = (idx: number, compact = false) => {
+  const renderSeat = (idx: number) => {
     const seat = state.seats[idx];
     const p = placement(idx);
     const isActive = view ? view.thinkingSeat === idx : state.actingSeat === idx && !state.finished;
@@ -165,7 +190,6 @@ export function TableView({
           revealCards={revealAll || (handOver && !seat.folded)}
           smallBlindSeat={smallBlindSeat}
           bigBlindSeat={bigBlindSeat}
-          compact={compact}
           showcase={showcase}
         />
       </div>
@@ -204,9 +228,9 @@ export function TableView({
         />
       )}
 
-      <div className="seats-top">{topRow.map((p) => renderSeat(p.index, p.compact))}</div>
+      <div className="seats-top">{topRow.map((p) => renderSeat(p.index))}</div>
 
-      {left !== null && <div className="seat-left">{renderSeat(left.index, true)}</div>}
+      {left !== null && <div className="seat-left">{renderSeat(left.index)}</div>}
 
       <div className="table-center">
         <div className="pot-display">
@@ -243,7 +267,7 @@ export function TableView({
         </div>
       </div>
 
-      {right !== null && <div className="seat-right">{renderSeat(right.index, true)}</div>}
+      {right !== null && <div className="seat-right">{renderSeat(right.index)}</div>}
 
       <div className="seats-bottom">{renderSeat(heroSeat)}</div>
     </div>

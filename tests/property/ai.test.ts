@@ -88,6 +88,29 @@ function simulate(tier: AITier, hands: number, seed: number): SimResult {
 }
 
 describe('G7 AI 档位可分辨', () => {
+  /**
+   * G7 的超时预算。
+   *
+   * 为什么需要显式且宽松的超时：`hard` 档每个决策跑 3000 次蒙特卡洛
+   * （`TIER_PARAMS.hard.equityIterations`），而这几条断言要跑 2000 手 ≈ 3 万个决策。
+   * 实测（本机，24 逻辑核）：
+   *   - 单次 `decideAI`（hard，翻牌后）≈ 10ms
+   *   - `easy` 2000 手 ≈ 0.1s（不做采样，只用强度近似）
+   *   - `hard` 2000 手 ≈ 302s，其中 `decideAI` 占 302.4s
+   *
+   * 原超时为 300s，即**余量为 0**：本机任何负载波动都会让测试失败
+   * （实测出现过 4540s 才超时的情形）。GitHub 的 CI runner 更快（整条 CI 约 12 分钟），
+   * 所以线上没暴露，但这是真实的测试脆弱性。
+   *
+   * 为什么不缩小样本：已实测过 N=600 时的统计余量——
+   *   - VPIP 差距：easy≈1.000 vs hard≈0.29，差距 ≈0.69，阈值 0.02 → 余量充足；
+   *   - 但**单调性**断言在 N=600 时 easy=1.000 / medium=0.998，差距仅 0.002，
+   *     与采样噪声同量级，会变成假失败。
+   * 即：缩样本会把「超时脆弱」换成「统计脆弱」，是更差的取舍。
+   * 因此保持样本量、把超时提到远高于实测成本（302s → 900s，约 3 倍余量）。
+   */
+  const G7_TIMEOUT_MS = 900_000;
+
   it('三档参数确实不同（接线正确性）', () => {
     const e = tierParams('easy');
     const m = tierParams('medium');
@@ -109,7 +132,7 @@ describe('G7 AI 档位可分辨', () => {
     expect(hard.vpip).toBeLessThan(easy.vpip);
     // 同时要求差异有实际意义（不是浮点噪声）
     expect(easy.vpip - hard.vpip).toBeGreaterThan(0.02);
-  }, 300_000);
+  }, G7_TIMEOUT_MS);
 
   it('面对加注时困难档弃牌率严格高于简单档', () => {
     const easy = simulate('easy', 2000, 33333);
@@ -118,7 +141,7 @@ describe('G7 AI 档位可分辨', () => {
     expect(easy.facedRaise).toBeGreaterThan(20);
     expect(hard.facedRaise).toBeGreaterThan(20);
     expect(hard.foldToRaiseRate).toBeGreaterThan(easy.foldToRaiseRate);
-  }, 300_000);
+  }, G7_TIMEOUT_MS);
 
   it('中等档入池率介于简单与困难之间（单调性）', () => {
     const easy = simulate('easy', 1200, 555);
@@ -126,7 +149,7 @@ describe('G7 AI 档位可分辨', () => {
     const hard = simulate('hard', 1200, 777);
     expect(medium.vpip).toBeLessThan(easy.vpip);
     expect(hard.vpip).toBeLessThan(medium.vpip);
-  }, 300_000);
+  }, G7_TIMEOUT_MS);
 
   it('AI 决策始终返回合法动作（不会产生非法动作导致卡死）', () => {
     const rng = createRng(31337);

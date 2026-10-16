@@ -343,8 +343,16 @@
     opacity: 1;
     transform: translate(calc(var(--dx) * 0.12), calc(var(--dy) * 0.12 - 14px)) scale(1.1);
   }
+  88% {
+    opacity: 1;
+    transform: translate(calc(var(--dx) * 0.92), calc(var(--dy) * 0.92)) scale(0.95);
+  }
+  /* 终态必须淡出到 opacity: 0。
+     `.chip-fly` 用了 `animation-fill-mode: both`，若终态保留不透明度
+     （早前是 0.9），筹码动画播完后会**永久停在底池上**，
+     视觉上就是底池数字旁边残留一枚硬币。 */
   100% {
-    opacity: 0.9;
+    opacity: 0;
     transform: translate(var(--dx), var(--dy)) scale(0.9);
   }
 }

@@ -39,7 +39,6 @@ export function SeatView({
   revealCards,
   smallBlindSeat,
   bigBlindSeat,
-  compact = false,
   showcase,
   isWinnerSeat = false,
 }: {
@@ -51,7 +50,6 @@ export function SeatView({
   revealCards: boolean;
   smallBlindSeat: number;
   bigBlindSeat: number;
-  compact?: boolean;
   showcase?: SeatShowcase;
   /** 该座位是本手赢家（用于结算高亮，与 `isWinner` 的区别：后者含摊牌牌型高亮）。 */
   isWinnerSeat?: boolean;
@@ -93,17 +91,17 @@ export function SeatView({
         <span className="stack">{seat.stack}</span>
       </div>
 
-      {!compact && (
-        <div className="seat-cards">
-          {seat.holeCards.map((c, i) =>
-            showCards ? (
-              <CardView key={i} card={c} small winning={isWinner} />
-            ) : (
-              <CardView key={i} small hidden />
-            ),
-          )}
-        </div>
-      )}
+      {/* 底牌：**始终渲染**。座位大小由 CSS 控制，绝不能用「是否渲染」来省空间——
+          早前 `{!compact && …}` 使六人桌左右两侧的两名 AI 完全不显示手牌。 */}
+      <div className="seat-cards">
+        {seat.holeCards.map((c, i) =>
+          showCards ? (
+            <CardView key={i} card={c} small winning={isWinner} />
+          ) : (
+            <CardView key={i} small hidden />
+          ),
+        )}
+      </div>
 
       <div className="badges">
         {seat.index === state.dealerSeat && <span className="badge dealer">D</span>}

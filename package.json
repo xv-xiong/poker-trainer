@@ -1,7 +1,7 @@
 {
   "name": "poker-trainer",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "德州扑克单人练习网页：6 人桌对局 + 三档 AI 对手 + 逐决策点 EV 复盘 + 分级胜率计算（查表 / 精确枚举 / 蒙特卡洛）",
   "keywords": [

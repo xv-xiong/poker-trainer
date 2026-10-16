@@ -191,6 +191,18 @@ scripts/             构建期生成脚本 + 一键验收
 | G9 | 类型检查 + 生产构建 + 产物存在性（含 Web Worker chunk） |
 | G10 | 持久化健壮性：迁移、损坏数据不白屏、FIFO 上限 |
 
+当前规模：单元与属性测试 **14 个文件 / 198 个用例**，E2E **31 个用例**（含线上部署验收，未配置 `LIVE_URL` 时跳过）。
+
+另有针对性回归测试覆盖下列已修缺陷：
+
+| 缺陷 | 回归测试 |
+|---|---|
+| 六人桌左右两侧座位不渲染底牌 | `tests/unit/table-order.test.ts`、`tests/e2e/bugfix.spec.ts` |
+| 座位视觉顺时针顺序与座次不一致 | `tests/unit/table-order.test.ts`、`tests/e2e/bugfix.spec.ts` |
+| 筹码飞行动画终态残留（永久停在底池上） | `tests/e2e/bugfix.spec.ts` |
+| 空有资格层会静默销毁筹码 | `tests/property/pot-audit.test.ts` |
+| AI 分步演出（思考先于动作、公共牌逐张） | `tests/unit/showcase.test.ts`、`tests/e2e/showcase.spec.ts` |
+
 ---
 
 ## 不支持项
