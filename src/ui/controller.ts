@@ -79,6 +79,8 @@ export class GameController {
   private aiThinking = false;
   private listeners = new Set<Listener>();
   private revision = 0;
+  /** 已提示过的存储写入失败种类（去重，避免配额耗尽时每手刷一条提示）。 */
+  private saveFailuresReported = new Set<string>();
   private readonly storage: StorageLike;
   private readonly equityClient: EquityClientLike | null;
   readonly heroSeat: number;
@@ -131,23 +133,55 @@ export class GameController {
 
   // ---- 设置 ----
 
+  /**
+   * 存储写入失败的统一处理。
+   *
+   * 为什么必须显式处理：saveState / saveHistory 在配额耗尽或隐私模式受限时
+   * 会 catch 后返回 false（不抛异常）。若调用方丢弃返回值，用户会以为数据已保存，
+   * 实际已丢失——这与 SECURITY.md「不得静默丢数据」直接冲突。
+   * 这里把失败转成 notices 提示（复用既有提示通道，无需新增 UI）。
+   *
+   * 用 Set 去重：配额持续耗尽时，每手结束都会失败；若每手都追加一条提示，
+   * notices 会无限增长。只在「本会话首次失败」时提示一次。
+   */
+  private reportSaveFailure(kind: 'state' | 'history'): void {
+    const key = kind === 'state' ? 'save-state' : 'save-history';
+    if (this.saveFailuresReported.has(key)) return;
+    this.saveFailuresReported.add(key);
+    const label = kind === 'state' ? '资金与设置' : '历史记录';
+    this.notices = [
+      ...this.notices,
+      `${label}未能写入本地存储（可能是配额已满或浏览器限制），本局数据可能不会被保存，建议先导出历史再清理`,
+    ];
+  }
+
+  /** 写状态并在失败时提示（所有 saveState 调用点都应走这里）。 */
+  private persistState(): void {
+    if (!saveState(this.storage, this.persisted)) this.reportSaveFailure('state');
+  }
+
+  /** 写历史并在失败时提示（所有 saveHistory 调用点都应走这里）。 */
+  private persistHistory(): void {
+    if (!saveHistory(this.storage, this.history)) this.reportSaveFailure('history');
+  }
+
   updateSettings(patch: Partial<Settings>): void {
     this.persisted.settings = { ...this.persisted.settings, ...patch };
-    saveState(this.storage, this.persisted);
+    this.persistState();
     this.emit();
   }
 
   resetBankroll(): void {
     this.persisted.bankroll = this.persisted.settings.startingStack;
     this.persisted.stats = emptyStats();
-    saveState(this.storage, this.persisted);
+    this.persistState();
     this.notices = ['资金与统计已重置'];
     this.emit();
   }
 
   clearHistory(): void {
     this.history = [];
-    saveHistory(this.storage, this.history);
+    this.persistHistory();
     this.emit();
   }
 
@@ -260,7 +294,7 @@ export class GameController {
     this.hint = { equity: r.equity, potOdds: po, source: r.source, action };
     st.hintsUsed += 1;
     this.persisted.stats.hintsUsed += 1;
-    saveState(this.storage, this.persisted);
+    this.persistState();
     this.emit();
   }
 
@@ -327,9 +361,18 @@ export class GameController {
     if (!st || !st.finished) return;
 
     // 复盘：逐决策点计算 EV 偏离
+    //
+    // 对手数必须取「该决策发生时」的存活人数，不能取终局存活人数。
+    // 根因：buildReview 遍历的是历史动作，而本方法在整手结束后才执行；
+    // 若用 st.seats[].folded（终局状态），早期决策点会漏掉「当时还在池里、
+    // 后来才弃牌」的对手，对手数偏少 → 胜率被系统性高估。
+    // 实测（6 人桌采样）：受影响决策点最大偏差 7.2 个百分点、平均 2.9 个百分点，
+    // 且方向恒为高估，会让玩家误以为当时的决策比实际更好。
+    // 修法：按动作序列重放，动作 i 发生前已弃牌者 = actions[0..i-1] 中的 fold。
+    const foldsBefore = this.foldCountPrefix(st);
     const review = buildReview(st, this.heroSeat, {
       equityAt: (actionIndex, seat) => {
-        const live = st.seats.filter((x) => !x.folded).length;
+        const live = st.seatCount - (foldsBefore[actionIndex] ?? 0);
         const opponents = Math.max(1, live - 1);
         const boardAtAction = this.boardAtAction(st, actionIndex);
         try {
@@ -388,8 +431,30 @@ export class GameController {
     this.persisted.bankroll += heroNet;
     this.persisted.nextDealerSeat = (st.dealerSeat + 1) % st.seatCount;
 
-    saveState(this.storage, this.persisted);
-    saveHistory(this.storage, this.history);
+    this.persistState();
+    this.persistHistory();
+  }
+
+  /**
+   * 每个决策点「发生前」的累计弃牌数（前缀和）。
+   *
+   * 返回数组长度 == actions.length + 1，下标 i 表示动作 i 发生前的弃牌人数：
+   * 动作 i 的决策时点存活人数 = seatCount - prefix[i]。
+   * 之所以用「动作前」而非「动作后」：复盘问的是「你做这个决定时，有几个对手
+   * 还可能跟你打」，即该动作尚未生效时的局面。弃牌动作本身不应把自己算作已弃牌。
+   *
+   * 为什么需要它：本方法在整手结束后调用，而 st.seats[].folded 已是终局状态，
+   * 无法还原中间时点。只有重放动作序列才能得到决策时点的真实对手数。
+   */
+  private foldCountPrefix(st: HandState): number[] {
+    const prefix = new Array<number>(st.actions.length + 1).fill(0);
+    let count = 0;
+    for (let i = 0; i < st.actions.length; i++) {
+      prefix[i] = count;
+      if (st.actions[i].type === 'fold') count++;
+    }
+    prefix[st.actions.length] = count;
+    return prefix;
   }
 
   /** 取某决策点发生时的公共牌（从动作记录反推：按街切分）。 */

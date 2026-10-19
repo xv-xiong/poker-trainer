@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { GameController } from '../../src/ui/controller.js';
-import { createMemoryStorage } from '../../src/store/persistence.js';
+import { createMemoryStorage, type StorageLike } from '../../src/store/persistence.js';
 import { defaultSettings } from '../../src/core/types.js';
 
 function makeController() {
@@ -256,5 +256,56 @@ describe('控制器：设置', () => {
     expect(st.seats.reduce((a, s) => a + s.stack, 0)).toBe(
       st.initialStacks.reduce((a, b) => a + b, 0),
     );
+  });
+});
+
+/**
+ * 回归 H7：存储写入失败必须让用户可见（不得静默丢数据）。
+ *
+ * 缺陷（评估报告 H7）：persistence 的 saveState/saveHistory 在配额耗尽时
+ * catch 后返回 false，而 controller 的调用点丢弃返回值——用户以为已保存，
+ * 实际数据已丢失，违背 SECURITY.md「不得静默丢数据」。
+ */
+describe('回归 H7：存储写入失败不静默', () => {
+  /** 一个「读得到、写就抛」的存储，模拟配额耗尽。 */
+  function createFailingStorage(): StorageLike {
+    const map = new Map<string, string>();
+    return {
+      getItem: (k) => (map.has(k) ? map.get(k)! : null),
+      setItem: () => {
+        throw new Error('QuotaExceededError');
+      },
+      removeItem: (k) => void map.delete(k),
+    };
+  }
+
+  it('配额耗尽时给出提示，而不是假装保存成功', () => {
+    const c = new GameController({ storage: createFailingStorage(), heroSeat: 0 });
+    c.updateSettings({ aiTier: 'hard' });
+    const notices = c.snapshot().notices.join(' ');
+    expect(notices).toContain('未能写入本地存储');
+    expect(notices).toContain('资金与设置');
+  });
+
+  it('同一类写入失败只提示一次（避免每手刷屏）', () => {
+    const c = new GameController({ storage: createFailingStorage(), heroSeat: 0 });
+    c.updateSettings({ aiTier: 'hard' });
+    c.updateSettings({ aiTier: 'easy' });
+    c.updateSettings({ aiTier: 'medium' });
+    const count = c.snapshot().notices.filter((n) => n.includes('资金与设置')).length;
+    expect(count).toBe(1);
+  });
+
+  it('历史写入失败也单独提示（与状态写入区分）', () => {
+    const c = new GameController({ storage: createFailingStorage(), heroSeat: 0 });
+    c.clearHistory();
+    expect(c.snapshot().notices.join(' ')).toContain('历史记录');
+  });
+
+  it('正常存储不应产生任何写入失败提示（不误报）', () => {
+    const c = new GameController({ storage: createMemoryStorage(), heroSeat: 0 });
+    c.updateSettings({ aiTier: 'hard' });
+    c.clearHistory();
+    expect(c.snapshot().notices.join(' ')).not.toContain('未能写入本地存储');
   });
 });

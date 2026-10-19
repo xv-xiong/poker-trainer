@@ -11,11 +11,20 @@
 
 import { expect, test, type Page } from '@playwright/test';
 
-/** 用指定桌人数进入牌桌。 */
+/**
+ * 用指定桌人数进入牌桌。
+ *
+ * 不用「固定 sleep 后读 localStorage」：那假设状态在某个墙钟时间内一定已写入，
+ * 机器繁忙时会在写入前就读到 null，导致设置没改成、后续断言假失败
+ * （评估报告 M5 记录的脆弱模式）。改为显式等待条件成立。
+ */
 async function enterWithSeatCount(page: Page, seatCount: number): Promise<void> {
   await page.goto('/poker-trainer/?skip-lobby=1');
   await page.waitForSelector('[data-testid="felt"]', { timeout: 30_000 });
-  await page.waitForTimeout(800);
+  // 等状态真正落库（而不是赌 800ms 足够）
+  await page
+    .waitForFunction(() => localStorage.getItem('poker-trainer:state') !== null, null, { timeout: 15_000 })
+    .catch(() => {});
   // 写入设置后重载，确保以目标人数开局
   await page.evaluate((n) => {
     const key = 'poker-trainer:state';
@@ -32,7 +41,12 @@ async function enterWithSeatCount(page: Page, seatCount: number): Promise<void> 
   }, seatCount);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('[data-testid="felt"]', { timeout: 30_000 });
-  await page.waitForTimeout(1500);
+  // 等座位真正渲染到目标人数（而不是赌 1500ms 足够）
+  await page.waitForFunction(
+    (n) => document.querySelectorAll('.seat').length === n,
+    seatCount,
+    { timeout: 15_000 },
+  );
 }
 
 test.describe('缺陷回归：六人桌底牌显示与座次顺序', () => {

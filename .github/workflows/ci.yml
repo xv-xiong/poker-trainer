@@ -37,3 +37,25 @@ jobs:
 
       - name: 运行全量验收闸门
         run: npm run verify
+
+      # 失败产物上传（修复「偶发 E2E 失败无法定位」）。
+      #
+      # 为什么必须有这一步：playwright.config.ts 已设 trace: 'retain-on-failure'
+      # 与 screenshot: 'only-on-failure'，但 CI runner 是临时的——不主动上传，
+      # 失败证据（trace / 截图 / 失败用例名与断言）会随 runner 销毁，
+      # 本地又可能被清空 test-results/，于是「偶发失败」永远无法定位。
+      #
+      # if: failure() 而非 always()：只在失败时上传，避免成功时浪费存储与时间。
+      # 两者目录都传：test-results/ 含 trace 与截图，playwright-report/ 含汇总报告。
+      # 版本号用精确标签（不用 @v7 浮动标签），与本仓库 deploy.yml 的写法一致；
+      # v7.0.2 已确认是 actions/upload-artifact 的现存 tag。
+      - name: 上传 Playwright 失败产物（trace / 截图 / 报告）
+        if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: playwright-failure-artifacts
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
+          if-no-files-found: warn

@@ -234,7 +234,25 @@ test.describe('task-4 分步演出', () => {
         const before = s.pot;
         const btn = page.getByRole('button', { name: /跟注|过牌/ }).first();
         await btn.click({ timeout: 5000 });
-        await page.waitForTimeout(400);
+        // 不用固定 sleep 后直接断言：改为显式等待「点击真的生效」这一条件
+        // （底池变化 / 本手结束 / 不再轮到我），超时即失败并给出明确信息。
+        await page
+          .waitForFunction(
+            (prevPot) => {
+              const potEl = document.querySelector('[data-testid="pot-value"]');
+              const pot = (potEl?.textContent ?? '').trim();
+              const myTurn = Boolean(document.querySelector('[data-testid="action-my-turn"]'));
+              const over = Boolean(
+                Array.from(document.querySelectorAll('h2')).find((h) =>
+                  h.textContent?.includes('本手结果'),
+                ),
+              );
+              return pot !== prevPot || over || !myTurn;
+            },
+            before,
+            { timeout: 15_000 },
+          )
+          .catch(() => {});
         const after = await sample(page);
         // 点击后必须真的生效：底池变化，或本手结束，或轮到 AI
         const changed = after.pot !== before || after.handOver || !after.canAct;

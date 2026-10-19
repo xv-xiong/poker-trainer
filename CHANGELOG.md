@@ -2,6 +2,82 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+基于 2026-10-19 全方位评估报告（`poker-trainer-assessment-report.md`）的修复批次。
+**`src/core/` 零改动**（14 个文件哈希未变，`git status --short -- src/core` 为空），
+金额与结算逻辑不受影响。
+
+### 修复
+
+- **复盘胜率取错「对手数」时点（评估报告 H1）**：
+  - **触发条件**：任何「决策发生时还有 N 人未弃牌、但整手结束时已有人弃牌」的局面。
+  - **影响组件**：`src/ui/controller.ts` 的 `finalizeHand`。
+  - **根因**：复盘在整手结束后才计算，却用 `st.seats.filter(!folded).length` 取存活人数
+    ——那是**终局**状态。早期决策点因此漏掉「当时还在池里、后来才弃牌」的对手，
+    对手数偏少 → 胜率被**系统性高估**。
+  - **实测影响**（200 手采样，129 个受影响决策点）：最大偏差 **7.2 个百分点**、
+    平均 **2.9 个百分点**，方向恒为高估，会让玩家误以为当时的决策比实际更好。
+  - **修复方式**：新增 `foldCountPrefix()`，按动作序列重放得出「每个动作发生前」的
+    累计弃牌数，决策时点存活人数 = `seatCount - prefix[actionIndex]`。
+  - **验证**：新增回归测试（`tests/unit/review-equity.test.ts`），并**回退到缺陷实现确认该测试会变红**
+    （具备真实区分力，非恒真断言）。
+- **`settings: {}` 等畸形存档导致白屏（评估报告 H3）**：
+  - **触发条件**：`localStorage` 中 `settings` 是对象但内部字段缺失/非法
+    （如 `{}`、`seatCount: 0`、`seatCount: "6"`、`aiTier: "unknown"`）。
+  - **影响组件**：`src/store/schema.ts` 的 `validateState`。
+  - **根因**：原实现只检查 `typeof settings === 'object'`，这类存档**能通过校验**被
+    `loadAll` 接受；用户点「开始练习」时 `createHand` 读 `settings.startingStack` 得到
+    `undefined`，抛 `TypeError: Cannot read properties of undefined`，表现为整页白屏
+    ——直接违背「损坏数据不白屏」的 G10 承诺。
+  - **修复方式**：新增 `validateSettings()` 逐字段校验（`seatCount` ∈ {2,6,9}、
+    筹码/盲注为正有限数、`aiTier` 三值之一、三个布尔开关），
+    校验失败走**既有**归档重建路径（归档原数据 → 默认值重建 → 界面提示），不静默丢数据。
+  - **刻意不校验的项**：`bigBlind >= smallBlind`。SettingsPanel 的两个盲注输入框是独立的，
+    用户可以把小盲设得比大盲大；若把这种「UI 能合法产生」的配置判为损坏，下次启动就会
+    归档重建、丢掉资金与统计——那是**新增**的数据丢失路径。语义约束应由输入侧拦截，
+    不该由「存档损坏检测」承担。
+  - **验证**：新增回归测试覆盖 6 种畸形存档，每种都断言「归档 + 不抛错 + 能正常开局」，
+    并另有用例确保 6 种合法存档（含「小盲 > 大盲」这一边界）不被误判；
+    并回退到浅校验确认测试会变红。
+- **存储写入失败被静默忽略（评估报告 H7）**：
+  - **根因**：`saveState`/`saveHistory` 在配额耗尽时返回 `false`（不抛异常），
+    而 `controller` 的 6 处调用点**全部丢弃返回值**——用户以为已保存，实际已丢失。
+  - **修复方式**：新增 `persistState()`/`persistHistory()` 统一包装 + `reportSaveFailure()`
+    转成界面 `notices` 提示；同类失败用 `Set` 去重，避免配额持续耗尽时每手刷屏。
+  - **验证**：新增 4 条测试（配额耗尽有提示、同类只提示一次、历史与状态分开提示、正常存储不误报）。
+
+### 文档
+
+- **修正「所有重计算在 Web Worker 内执行」的过度承诺（评估报告 M6）**：
+  实测只有「用户主动查看提示」走 Worker；**AI 决策与赛后复盘是主线程同步计算**
+  （hard 档单次决策 p50 2.1ms / p95 32.5ms / max 44.2ms，复盘每决策点约 4.8ms）。
+  README 增加「执行线程口径」表，`SettingsPanel` 的说明同步改写。
+- **修正存储体积估算（评估报告 M6）**：`schema.ts` 原注释写「500 手 x 约 2KB 约 1MB」，
+  实测单手**平均 5.2KB / 最大 8.3KB**，500 手约 **2.5–4.0MB**（已接近 5MB 配额），
+  风险被低估 3–4 倍。注释改为实测值并说明由此推出的两个约束。
+- **修正 v1.1 范围口径矛盾（评估报告 M6）**：README「属 v1.1 范围，当前版本未实现」
+  在 v1.1.0 已发布后自相矛盾，改为「当前版本未实现，也未排期」。
+
+### 测试与 CI
+
+- **CI 增加 Playwright 失败产物上传（评估报告 H5）**：`ci.yml` 在 verify 后增加
+  `actions/upload-artifact@v7.0.2`（`if: failure()`，上传 `test-results/` 与
+  `playwright-report/`，保留 14 天）。此前失败证据随 runner 销毁，是「偶发 E2E 失败
+  无法定位」的直接原因。
+- **降低 E2E 固定等待的脆弱性（评估报告 M5）**：把「固定 sleep 后硬断言」的 6 处
+  改为条件等待（`expect(...).toBeEnabled()` / `waitForFunction`）：
+  `bugfix.spec.ts` 的 `enterWithSeatCount`（800ms + 1500ms → 等状态落库 + 等座位数）、
+  `app.spec.ts` 的提示按钮、快捷键 F、确定性结算场景、`showcase.spec.ts` 的「点击必须生效」。
+  剩余 14 处 `waitForTimeout` 均位于**有 deadline 的采样循环**内（测试设计必需的采样节奏），
+  不构成脆弱点。
+
+### 说明
+
+- 本批次**未**实施评估报告中列为「建议/可选」但未要求立即实施的项（M1–M4、M7–M10、L1–L8），
+  例如 ESLint 引入、`verify` 分层、历史重新复盘、加注快捷键、归档清理机制等。
+- `main` 分支保护（H6）属**仓库设置**而非代码改动，单独处理。
+
 ## [1.1.0] - 2026-10-16
 
 表现层改造（新增开始界面、全局风格对齐参考站、AI 分步演出与全事件动画），

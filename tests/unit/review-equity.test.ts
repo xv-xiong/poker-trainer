@@ -187,3 +187,94 @@ describe('复盘胜率来自正确的牌面与对手数', () => {
     expect(vs1).toBeGreaterThan(vs5 + 0.15);
   });
 });
+
+/**
+ * 回归：复盘胜率必须按「决策时点」的对手数计算，而非整手结束后的终局对手数。
+ *
+ * 缺陷（评估报告 H1，已实证）：finalizeHand 在整手结束后才跑复盘，
+ * 曾用 `st.seats.filter(!folded).length` 取存活人数——那是**终局**状态。
+ * 早期决策点因此漏掉「当时还在池里、后来才弃牌」的对手，对手数偏少，
+ * 胜率被系统性高估（实测最大 7.2 个百分点、平均 2.9 个百分点，方向恒为高估）。
+ *
+ * 本测试用确定性场景锁死口径：构造一手牌，使「玩家第一个决策点」发生时
+ * 存活人数 > 终局存活人数，然后断言复盘胜率等于「按决策时点对手数」独立计算的值，
+ * 且**不等于**「按终局对手数」计算的值。
+ */
+describe('回归 H1：复盘胜率取决策时点的对手数（不是终局）', () => {
+  it('玩家首个决策点的胜率必须按当时的存活人数计算', () => {
+    const c = new GameController({ storage: createMemoryStorage(), heroSeat: 0 });
+    c.updateSettings({ aiTier: 'medium', seatCount: 6 });
+
+    // 找一手满足条件的牌：玩家首个动作发生前有 6 人存活，终局存活人数更少。
+    // 用固定种子序列保证可复现（不依赖 Math.random）。
+    let found = false;
+    for (let attempt = 0; attempt < 60 && !found; attempt++) {
+      c.startHand();
+      let guard = 0;
+      while (guard++ < 400) {
+        const s = c.snapshot();
+        const st = c.currentState();
+        if (!st || st.finished) break;
+        if (s.heroTurn) {
+          const legal = s.legal!;
+          // 让玩家尽早弃牌以制造「早期多人 → 后期少人」的局面
+          if (legal.canFold && st.street !== 'preflop') c.act('fold');
+          else if (legal.canCall) c.act('call');
+          else if (legal.canCheck) c.act('check');
+          else c.act('fold');
+        } else {
+          c.runAI();
+        }
+      }
+
+      const st = c.currentState();
+      const rec = c.snapshot().lastRecord;
+      if (!st || !rec || rec.review.length === 0) continue;
+
+      // 重放动作序列，算「每个动作发生前」的存活人数
+      const liveBefore: number[] = [];
+      let folds = 0;
+      for (const a of st.actions) {
+        liveBefore.push(st.seatCount - folds);
+        if (a.type === 'fold') folds++;
+      }
+      const liveAtEnd = st.seats.filter((x) => !x.folded).length;
+
+      const first = rec.review[0];
+      const liveAtDecision = liveBefore[first.actionIndex];
+      if (liveAtDecision <= liveAtEnd) continue; // 本手不满足条件，继续找
+
+      found = true;
+
+      // 独立计算：按「决策时点对手数」
+      const boardLen = first.street === 'preflop' ? 0 : first.street === 'flop' ? 3 : first.street === 'turn' ? 4 : 5;
+      const hero = st.seats[c.heroSeat].holeCards;
+      const board = st.board.slice(0, boardLen);
+      const opponentsAtDecision = Math.max(1, liveAtDecision - 1);
+      const opponentsAtEnd = Math.max(1, liveAtEnd - 1);
+
+      const expected = computeEquity({
+        hero,
+        board,
+        opponents: opponentsAtDecision,
+        iterations: 3_000,
+        rng: createRng(st.seed ^ first.actionIndex ^ 0x777),
+      }).equity;
+      const wrong = computeEquity({
+        hero,
+        board,
+        opponents: opponentsAtEnd,
+        iterations: 3_000,
+        rng: createRng(st.seed ^ first.actionIndex ^ 0x777),
+      }).equity;
+
+      // 必须等于「决策时点」口径
+      expect(first.equity).toBeCloseTo(expected, 10);
+      // 且必须与「终局」口径不同（否则本测试没有区分力）
+      expect(Math.abs(expected - wrong)).toBeGreaterThan(1e-6);
+      expect(Math.abs(first.equity - wrong)).toBeGreaterThan(1e-6);
+    }
+
+    expect(found, '未能在 60 手内构造出「决策时点存活人数 > 终局存活人数」的场景').toBe(true);
+  });
+});

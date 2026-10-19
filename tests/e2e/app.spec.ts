@@ -207,18 +207,15 @@ test.describe('G8 端到端全链路', () => {
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await enterTable(page);
-    await page.waitForTimeout(1200);
+    // 不用固定 sleep：等牌桌真正按 2 人桌渲染出来（评估报告 M5 的脆弱模式）
+    await page.waitForFunction(() => document.querySelectorAll('.seat').length === 2, null, {
+      timeout: 15_000,
+    });
 
-    // 轮到我立刻弃牌
-    for (let i = 0; i < 60; i++) {
-      if (await page.getByRole('heading', { name: '本手结果' }).isVisible().catch(() => false)) break;
-      const foldBtn = page.getByRole('button', { name: '弃牌（Fold）' }).first();
-      if ((await foldBtn.isVisible().catch(() => false)) && (await foldBtn.isEnabled().catch(() => false))) {
-        await foldBtn.click({ timeout: 5000 }).catch(() => {});
-        break;
-      }
-      await page.waitForTimeout(220);
-    }
+    // 轮到我立刻弃牌：显式等待按钮可用，不用固定轮询 + sleep
+    const foldBtn = page.getByRole('button', { name: '弃牌（Fold）' }).first();
+    await expect(foldBtn).toBeEnabled({ timeout: 40_000 });
+    await foldBtn.click({ timeout: 5000 });
 
     await expect(page.getByRole('heading', { name: '分配明细（主池 / 边池 / 未跟注退还）' })).toBeVisible({
       timeout: 30_000,
@@ -281,19 +278,12 @@ test.describe('G8 端到端全链路', () => {
     await page.goto('/poker-trainer/');
     await enterTable(page);
 
-    // 等到轮到自己
-    for (let i = 0; i < 40; i++) {
-      const hintBtn = page.getByRole('button', { name: /查看提示|计算中/ });
-      if (await hintBtn.isVisible().catch(() => false)) {
-        if (await hintBtn.isEnabled()) {
-          await hintBtn.click();
-          await expect(page.getByText('估算胜率')).toBeVisible({ timeout: 30_000 });
-          await expect(page.getByText('底池赔率要求', { exact: true })).toBeVisible();
-          break;
-        }
-      }
-      await page.waitForTimeout(300);
-    }
+    // 等到提示按钮真正可点（而不是固定轮询 40 次后可能一次都没点到就静默通过）
+    const hintBtn = page.getByRole('button', { name: /查看提示/ });
+    await expect(hintBtn).toBeEnabled({ timeout: 40_000 });
+    await hintBtn.click();
+    await expect(page.getByText('估算胜率')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('底池赔率要求', { exact: true })).toBeVisible();
 
     expect(errors).toEqual([]);
   });
@@ -303,15 +293,13 @@ test.describe('G8 端到端全链路', () => {
     await page.goto('/poker-trainer/');
     await enterTable(page);
 
-    for (let i = 0; i < 40; i++) {
-      const foldBtn = page.getByRole('button', { name: '弃牌（Fold）' });
-      if (await foldBtn.isEnabled().catch(() => false)) {
-        await page.keyboard.press('f');
-        await page.waitForTimeout(400);
-        break;
-      }
-      await page.waitForTimeout(300);
-    }
+    // 等到弃牌按钮真正可用（而不是固定轮询若干次后盲按）
+    const foldBtn = page.getByRole('button', { name: '弃牌（Fold）' });
+    await expect(foldBtn).toBeEnabled({ timeout: 40_000 });
+    const before = await page.locator('.action-panel').innerText();
+    await page.keyboard.press('f');
+    // 断言按键真的生效：行动区发生变化（进入等待态或本手结束）
+    await expect(page.locator('.action-panel')).not.toHaveText(before, { timeout: 15_000 });
 
     expect(errors).toEqual([]);
   });
