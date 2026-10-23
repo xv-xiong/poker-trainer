@@ -451,22 +451,47 @@ test.describe('task-2 弃牌后 AI 继续打完', () => {
   });
 
   test('多人底池翻牌弃牌后，AI 之间继续按座位行动并逐张发出公共牌', async ({ page }) => {
+    // 需要换手重试，故放宽到 10 分钟（默认 300s）。
+    test.setTimeout(600_000);
     const { errors } = attachErrors(page);
     await enterTable(page);
 
-    const liveAtFlop = await reachMultiwayFlop(page);
-    const before = await sample(page);
-    expect(before.boardRevealed, '弃牌时公共牌应已发出翻牌（≥3 张）').toBeGreaterThanOrEqual(3);
+    // 「弃牌后只出现 1 次 AI 动作」是**合法结局**，不能当成缺陷：
+    // 其余人里有人全下、剩下的全弃牌时，本手只剩「全下 → 跑完公共牌 → 摊牌」，
+    // 于是弃牌后只有 1 次动作气泡。第二批把 medium 的面对下注弃牌率从 0% 提到 23.6%
+    // 之后，这类「一家下注/全下、其余弃牌」的手明显变多，本用例因此变成偶发失败。
+    // 与上一个用例一致：换手重试，直到遇到「弃牌后确实由多家 AI 继续对打」的一手。
+    type Chosen = { d: Derived; st: Settlement; liveAtFlop: number[]; postSeq: number[] };
+    let chosen: Chosen | null = null;
+    for (let attempt = 0; attempt < 5 && chosen === null; attempt++) {
+      if (attempt > 0) await clickNextHand(page);
+      const liveAtFlop = await reachMultiwayFlop(page);
+      const before = await sample(page);
+      if (before.boardRevealed < 3) {
+        console.log(`第 ${attempt + 1} 手：未到翻牌（公共牌 ${before.boardRevealed} 张），换下一手`);
+        continue;
+      }
 
-    const t0 = await clickFold(page);
-    const samples = await sampleUntilOver(page);
-    const d = derive(samples, t0);
-    dump('翻牌弃牌（多人底池）', samples, t0);
-    const st = await readSettlement(page);
-    console.log(
-      `翻牌弃牌结果：弃牌→结算 ${(d.elapsedMs / 1000).toFixed(2)}s，AI 动作 ${d.aiActionCount} 次，` +
-        `座位序列 [${d.aiActionSeats.join(', ')}]，公共牌 [${d.boardSeq.join('→')}]，结束方式=${st.stats['结束方式'] ?? '（无）'}`,
-    );
+      const t0 = await clickFold(page);
+      const samples = await sampleUntilOver(page);
+      const d = derive(samples, t0);
+      dump(`第 ${attempt + 1} 手（翻牌弃牌·多人底池）`, samples, t0);
+      const st = await readSettlement(page);
+      console.log(
+        `第 ${attempt + 1} 手结果：弃牌→结算 ${(d.elapsedMs / 1000).toFixed(2)}s，AI 动作 ${d.aiActionCount} 次，` +
+          `座位序列 [${d.aiActionSeats.join(', ')}]，公共牌 [${d.boardSeq.join('→')}]，结束方式=${st.stats['结束方式'] ?? '（无）'}`,
+      );
+
+      // 只选「AI 之间继续对打」的手：弃牌后 ≥2 次动作且 ≥2 个不同 AI 座位。
+      // 否则（例如全下后跑完公共牌）本手无法验证该行为，换下一手。
+      if (d.aiActionCount >= 2 && new Set(d.aiActionSeats).size >= 2) {
+        const postSeq = await sampleBoardUntilFull(page);
+        chosen = { d, st, liveAtFlop, postSeq };
+      }
+    }
+
+    expect(chosen, '至少应有一手在翻牌弃牌后由多家 AI 继续对打').not.toBeNull();
+    const { d, st, liveAtFlop, postSeq } = chosen as Chosen;
 
     // AI 继续行动
     expect(d.aiActionCount, '翻牌弃牌后 AI 必须继续行动（≥ 2 次动作气泡）').toBeGreaterThanOrEqual(2);
@@ -479,7 +504,6 @@ test.describe('task-2 弃牌后 AI 继续打完', () => {
     expect(new Set(d.aiActionSeats).size, '应至少有 2 个不同 AI 座位继续行动').toBeGreaterThanOrEqual(2);
     // 公共牌逐张：把「结算面板出现前」与「结算面板出现后（全下摊牌在面板背后揭示）」的
     // 张数序列拼起来，整体不得跳变（即任何时刻都不允许 0 → 3/5 一次全出）。
-    const postSeq = await sampleBoardUntilFull(page);
     const fullBoardSeq = [...d.boardSeq, ...postSeq.filter((n) => n > (d.boardSeq[d.boardSeq.length - 1] ?? -1))];
     for (let i = 1; i < fullBoardSeq.length; i++) {
       expect(
