@@ -26,6 +26,28 @@ export interface AITierParams {
   foldToRaiseThreshold: number;
   /** 加注尺度（相对底池的倍数）。 */
   raiseSizeFactor: number;
+  /**
+   * 「满足赔率（okToCall）」时仍跟注的概率门（0..1；1 = 满足就一定跟注）。
+   *
+   * 口径：仅非 strictPotOdds 档生效。okToCall 成立时，以 callFrequency 的概率
+   * 跟注；未通过概率门则弃牌。用于打散「只要赔率允许就机械跟注」的行为，
+   * 从而把偏高的跟注率降下来。
+   */
+  callFrequency: number;
+  /**
+   * 「不满足赔率」时仍宽松跟注的概率门（0..1；0 = 一定弃牌）。
+   *
+   * 口径：仅非 strictPotOdds 档生效。旧逻辑在 okToCall 不成立时会无条件
+   * 「宽松跟注」，导致简单/中等档面对下注永不弃牌；改为概率门后，
+   * 只有 looseCallChance 的概率继续跟注，其余弃牌。
+   */
+  looseCallChance: number;
+  /**
+   * 手牌强度抖动幅度（0..1）：决策前给 strength 叠加 ±strengthJitter 的
+   * 均匀噪声（夹到 [0,1]），用于去机械化——同一局面不再恒定输出同一动作。
+   * 0 = 不抖动。困难档的 strictPotOdds 判定用 equity，不受此抖动影响。
+   */
+  strengthJitter: number;
 }
 
 export const TIER_PARAMS: Record<AITier, AITierParams> = {
@@ -39,6 +61,11 @@ export const TIER_PARAMS: Record<AITier, AITierParams> = {
     bluffFrequency: 0.02,
     foldToRaiseThreshold: 0.86,
     raiseSizeFactor: 0.4,
+    // 简单档仍偏松，但不再「面对下注永不弃牌」：12% 的赔率达标跟注会放弃，
+    // 赔率不达标时 45% 仍宽松跟注（保留「松」的性格）。
+    callFrequency: 0.88,
+    looseCallChance: 0.45,
+    strengthJitter: 0.1,
   },
   // 中等：位置分档表、粗略启发式、宽松参考赔率
   medium: {
@@ -50,6 +77,11 @@ export const TIER_PARAMS: Record<AITier, AITierParams> = {
     bluffFrequency: 0.08,
     foldToRaiseThreshold: 0.62,
     raiseSizeFactor: 0.55,
+    // 中等档是本次「降跟注率」的主战场：赔率达标也只有 72% 跟注，
+    // 不达标仅 30% 宽松跟注，其余弃牌。
+    callFrequency: 0.72,
+    looseCallChance: 0.3,
+    strengthJitter: 0.08,
   },
   // 困难：蒙特卡洛胜率 + 严格执行底池赔率 + 更多诈唬 + 弱牌果断弃
   hard: {
@@ -61,6 +93,11 @@ export const TIER_PARAMS: Record<AITier, AITierParams> = {
     bluffFrequency: 0.15,
     foldToRaiseThreshold: 0.42,
     raiseSizeFactor: 0.66,
+    // 困难档走 strictPotOdds 分支，两个概率门不生效（保持「胜率不足即弃」）；
+    // 仅用极小的强度抖动去机械化。
+    callFrequency: 1,
+    looseCallChance: 0,
+    strengthJitter: 0.04,
   },
 };
 

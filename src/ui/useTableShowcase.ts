@@ -33,6 +33,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ControllerSnapshot } from './controller.js';
 import { MAX_SHOWCASE_STEPS } from './showcaseStep.js';
+import { aiThinkDelayMs } from './thinkTiming.js';
 import {
   ACTION_LABELS,
   type ActionRecord,
@@ -45,7 +46,15 @@ export type ShowcaseAction = ActionRecord;
 
 /** 演出节奏（毫秒）。集中一处，保证组件 CSS、E2E 断言与调度逻辑三方一致。 */
 export interface ShowcaseTiming {
-  /** AI / 发牌的「思考」停顿：此期间座位高亮、显示思考气泡。 */
+  /**
+   * AI / 发牌的「思考」停顿基线：此期间座位高亮、显示思考气泡。
+   *
+   * **注意**：`ai-action` 步的实际等待时长不取本值，而是在
+   * `src/ui/thinkTiming.ts` 的 `AI_THINK_RANGE`（1100–2400ms）内按
+   * (seed, revision, seat) 哈希抽样（见 `aiThinkDelayMs`）。本字段在这里只剩
+   * 两个作用：① 作为「是否启用等待」的开关（`0` = reduced-motion，等待归零）；
+   * ② 供 `planShowcaseStep` 的纯函数单测保持一个确定的基线值。
+   */
   thinkMs: number;
   /** 揭示一张公共牌后、进入下一步前的停顿。 */
   revealMs: number;
@@ -393,15 +402,27 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
   // 这里只负责「不能超过真实张数」的收敛（防止状态被外部重置后越界）。
 
   // ── 结算停顿 ──
+  //
+  // **必须等公共牌全部揭示完，才开始结算停顿。**
+  // 为什么：全下摊牌时引擎会在 `finish()` 之前用 `runOutBoard` 一次性把公共牌
+  // 补满 5 张（src/core/hand.ts），因此「`st.finished` 变 true」的时刻，演出层
+  // 的揭示游标 `revealedBoard` 可能还停在 0/3/4。若这里只按 `st.finished` 计时，
+  // 结算面板会在公共牌一张没翻时就弹出，剩下的牌全部在面板**背后**翻完 ——
+  // 玩家看不到「这手是怎么结束的」（实测全下摊牌时 `data-revealed=0` 就出了面板）。
+  //
+  // 注意 `planShowcaseStep` 本身顺序是对的（先 `revealed < board.length` 出
+  // `board` 步，再 `finished` 出 `settle` 步）；本 effect 是另一条独立路径，
+  // 两条路径都会置 `settleHold`，所以这里也必须加同样的 gate。
   useEffect(() => {
     if (!st?.finished) {
       setSettleHold(false);
       return;
     }
     if (settleHold) return;
+    if (revealedBoard < (st?.board.length ?? 0)) return; // 等揭示游标追平真实张数
     const t = setTimeout(() => setSettleHold(true), Math.max(0, timing.settleMs));
     return () => clearTimeout(t);
-  }, [st?.finished, settleHold, timing.settleMs, epoch]);
+  }, [st?.finished, settleHold, timing.settleMs, epoch, revealedBoard, st?.board.length]);
 
   // ── 非生产环境不变量自检（第一处：揭示游标）──
   // 这两条是「分步演出」最容易被后续改动破坏的地方，且破坏后表现是
@@ -414,9 +435,13 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
       throw new Error(`[showcase] 揭示的张数 ${revealedBoard} 超过真实公共牌 ${st.board.length}`);
     }
     if (st.finished && st.finishReason === 'showdown' && revealedBoard !== st.board.length) {
-      throw new Error('[showcase] 摊牌结束但公共牌未全部亮相');
+      // 全下摊牌时 `finished` 与「揭示完成」之间天然存在几帧窗口（引擎一次性补满
+      // 公共牌，演出层要逐张追），所以判据是「结算已经开始了」而不是「牌局结束了」。
+      if (settleHold) {
+        throw new Error('[showcase] 结算已开始但公共牌未全部亮相');
+      }
     }
-  }, [revealedBoard, viewKey, st?.board.length, st?.finished, st?.finishReason, st]);
+  }, [revealedBoard, viewKey, st?.board.length, st?.finished, st?.finishReason, st, settleHold]);
 
   const view = useMemo<ShowcaseView>(() => {
     if (!st) {
@@ -487,8 +512,39 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
   const stepRef = useRef(step);
   stepRef.current = step;
 
+  /**
+   * 本步的实际等待时长（任务一：AI 思考时长模拟真人）。
+   *
+   * 为什么放在这一层、而不是直接改 `planShowcaseStep` 的 `delayMs`：
+   *   - `planShowcaseStep` 是**纯函数**，单测断言它「同状态重复调用结果完全相同」；
+   *     在纯函数里抽随机数会直接破坏这条不变量。
+   *   - 抽样必须「一步只抽一次」。用 (seed, revision, seat) 做哈希键，同一步在
+   *     任意次重渲染 / StrictMode 双调用下都得到同一个值，因此定时器不会被
+   *     自己的清理函数反复取消（那会表现为画面停在「思考中」不动）。
+   *
+   * 只有 `ai-action` 步被覆盖；`board` / `settle` / `hero-action` 仍用
+   * `planShowcaseStep` 给出的确定值（它们不是「AI 思考」，不该随机化）。
+   */
+  const aiThinkDelay = useMemo(
+    () =>
+      aiThinkDelayMs({
+        kind: step.kind,
+        seat: 'seat' in step ? step.seat : -1,
+        baseMs: timing.thinkMs,
+        seed: st?.seed ?? 0,
+        revision: snap.revision,
+      }),
+    // stepKey 已涵盖 kind / seat / revision / 揭示游标 / settleHold，用它做依赖即可；
+    // st 是原地修改的对象，引用不变，不能进依赖数组。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stepKey, timing.thinkMs, st?.seed],
+  );
+
   // step 的身份只随调度键变化；delayMs 每次读取最新值，不参与身份计算。
-  const stableStep = useMemo<ShowcaseStep>(() => stepRef.current, [stepKey]);
+  const stableStep = useMemo<ShowcaseStep>(() => {
+    const s = stepRef.current;
+    return s.kind === 'ai-action' ? { ...s, delayMs: aiThinkDelay } : s;
+  }, [stepKey, aiThinkDelay]);
 
   // 调试观测点（仅非生产）：把演出调度轨迹暴露到 window，便于 E2E 采样取证。
   useEffect(() => {
@@ -498,9 +554,11 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
     if (w.__showcaseTrace.length < 400) {
       w.__showcaseTrace.push({
         rev: snap.revision,
-        step: step.kind,
-        seat: 'seat' in step ? step.seat : null,
-        delay: 'delayMs' in step ? step.delayMs : null,
+        step: stableStep.kind,
+        seat: 'seat' in stableStep ? stableStep.seat : null,
+        // 记录**实际**等待时长（含任务一的随机思考时长），便于 E2E 取证：
+        // 「连续多次 AI 决策耗时都在区间内」这条验收要求就靠这个字段核对。
+        delay: 'delayMs' in stableStep ? stableStep.delayMs : null,
         acting: st?.actingSeat ?? null,
         actions: st?.actions.length ?? -1,
         board: st?.board.length ?? -1,
@@ -510,7 +568,7 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
         finished: st?.finished ?? false,
       });
     }
-  }, [snap.revision, step, st, view, snap]);
+  }, [snap.revision, stableStep, st, view, snap]);
 
   /** 演出中是否有待办的一步（供 App 的调度定时器判断是否需要排期）。 */
   const busy = step.kind !== 'idle';

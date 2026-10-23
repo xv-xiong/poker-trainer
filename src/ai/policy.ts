@@ -27,6 +27,11 @@ export interface AIDecision {
   };
 }
 
+/** 把数值夹到 [0,1]。 */
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
 /** 后翻牌的手牌强度启发式（0..1），仅在非困难档使用。 */
 function heuristicStrength(state: HandState, seatIndex: number): number {
   const hole = state.seats[seatIndex].holeCards;
@@ -69,6 +74,13 @@ export function decideAI(
     strength = preflopStrength(seat.holeCards) * positionFactor(seatFromDealer, state.seatCount);
   } else {
     strength = heuristicStrength(state, seatIndex);
+  }
+
+  // 去机械化：给强度叠加 ±strengthJitter 的均匀噪声（夹到 [0,1]）。
+  // 为什么在这里做：strength 是下面所有阈值判定的共同输入，加一点噪声就能
+  // 让「同一局面」不再恒定输出同一动作；困难档的赔率弃牌用 equity，不受影响。
+  if (params.strengthJitter > 0) {
+    strength = clamp01(strength + (rng.next() * 2 - 1) * params.strengthJitter);
   }
 
   // 胜率：困难档用蒙特卡洛；其余档用强度近似（不做采样，保证速度）
@@ -137,18 +149,34 @@ export function decideAI(
       return mk('raise', to, seat.tier, strength, equity, po, '诈唬加注');
     }
 
-    // 跟注：困难档要求满足赔率；其他档按宽容系数
+    // 跟注：困难档要求满足赔率；其他档按宽容系数 + 概率门
     if (legal.canCall) {
       const okToCall = params.strictPotOdds
         ? equity >= requiredEquity
         : equity >= po * params.potOddsMargin || strength >= params.preflopThreshold * 0.6;
-      if (okToCall) return mk('call', 0, seat.tier, strength, equity, po, '跟注');
-      if (params.strictPotOdds && legal.canFold) {
-        return mk('fold', 0, seat.tier, strength, equity, po, '赔率不支持跟注');
-      }
-      // 简单/中等档即使赔率不佳也可能跟注（体现「松」）
-      if (!params.strictPotOdds) {
-        return mk('call', 0, seat.tier, strength, equity, po, '宽松跟注');
+
+      if (params.strictPotOdds) {
+        // 困难档：语义逐字保留——满足赔率才跟，否则弃牌。
+        if (okToCall) return mk('call', 0, seat.tier, strength, equity, po, '跟注');
+        if (legal.canFold) {
+          return mk('fold', 0, seat.tier, strength, equity, po, '赔率不支持跟注');
+        }
+      } else if (okToCall) {
+        // 赔率达标也未必跟：按 callFrequency 概率门决定，未通过则弃牌。
+        if (rng.next() < params.callFrequency) {
+          return mk('call', 0, seat.tier, strength, equity, po, '跟注');
+        }
+        if (legal.canFold) {
+          return mk('fold', 0, seat.tier, strength, equity, po, '跟注频率门弃牌');
+        }
+      } else {
+        // 赔率不达标：只有 looseCallChance 的概率继续「宽松跟注」，否则弃牌。
+        if (rng.next() < params.looseCallChance) {
+          return mk('call', 0, seat.tier, strength, equity, po, '宽松跟注');
+        }
+        if (legal.canFold) {
+          return mk('fold', 0, seat.tier, strength, equity, po, '赔率不足弃牌');
+        }
       }
     }
     void potCommitted;

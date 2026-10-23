@@ -108,25 +108,58 @@ test.describe('缺陷回归：六人桌底牌显示与座次顺序', () => {
     await enterWithSeatCount(page, 6);
 
     /**
-     * 采样「当前行动座位」与「已亮相公共牌数」。
+     * 采样「当前行动座位」「已亮相公共牌数」与「当前不能行动的座位」。
      *
      * 为什么必须带上公共牌数：跨街时行动权会**重置**为「庄家左侧第一个可行动者」，
      * 该座位完全可能在上一条街最后行动者的**后方**（例如翻前最后由庄家/按钮行动，
      * 翻后却从庄家左侧开始）。因此「全局单调递增」不是正确的不变量——
      * 正确的不变量是「**同一街内**严格顺时针前进」。早前本测试漏了这一层，
      * 把合法的跨街重置误判为缺陷（已修正）。
+     *
+     * 为什么不能直接断言「步进距离 <= 3」：行动权只跳过**不能行动**的座位——
+     * 已弃牌、已全下、以及玩家自己（玩家的座位不出现思考光晕，其动作对本采样不可见）。
+     * 弃牌率提高后，同一街内出现 `3 -> 1`（中间 4、5 已弃牌）是完全合法的，
+     * 距离最大可达 n-1，用距离阈值会把它误判成「跳回」。
+     * 因此判据改为「跳过的每一个中间座位都必须不能行动」——这比距离阈值更强也更准确。
      */
-    const steps: Array<{ seat: number; street: number }> = [];
+    const steps: Array<{
+      seat: number;
+      street: number;
+      folded: number[];
+      allIn: number[];
+      hero: number;
+    }> = [];
     for (let i = 0; i < 220; i++) {
       const snap = await page.evaluate(() => {
         const a = document.querySelector('.seat.active');
         const revealed = document.querySelector('[data-testid="board"]')?.getAttribute('data-revealed');
-        return { seat: a ? Number(a.getAttribute('data-seat')) : null, street: Number(revealed ?? 0) };
+        const folded: number[] = [];
+        const allIn: number[] = [];
+        let hero = -1;
+        for (const el of Array.from(document.querySelectorAll('.seat'))) {
+          const idx = Number(el.getAttribute('data-seat'));
+          if (el.classList.contains('folded')) folded.push(idx);
+          if (el.classList.contains('hero')) hero = idx;
+          if (el.querySelector('.badge.allin')) allIn.push(idx);
+        }
+        return {
+          seat: a ? Number(a.getAttribute('data-seat')) : null,
+          street: Number(revealed ?? 0),
+          folded,
+          allIn,
+          hero,
+        };
       });
       if (snap.seat !== null) {
         const last = steps[steps.length - 1];
         if (!last || last.seat !== snap.seat || last.street !== snap.street) {
-          steps.push({ seat: snap.seat, street: snap.street });
+          steps.push({
+            seat: snap.seat,
+            street: snap.street,
+            folded: snap.folded,
+            allIn: snap.allIn,
+            hero: snap.hero,
+          });
         }
       }
       if (await page.getByRole('heading', { name: '本手结果' }).isVisible().catch(() => false)) break;
@@ -139,17 +172,26 @@ test.describe('缺陷回归：六人桌底牌显示与座次顺序', () => {
 
     expect(steps.length, '应观察到若干次行动').toBeGreaterThan(2);
 
-    // 仅在同一街内断言顺时针：距离必须在 (0, n/2] 内，绝不允许回头
+    // 仅在同一街内断言顺时针：行动权只能顺时针前进，且跳过的座位必须不能行动
+    const N = 6;
     let sameStreetChecks = 0;
     for (let i = 1; i < steps.length; i++) {
-      if (steps[i].street !== steps[i - 1].street) continue; // 跨街重置，跳过
+      const prev = steps[i - 1];
+      const cur = steps[i];
+      if (cur.street !== prev.street) continue; // 跨街重置，跳过
       sameStreetChecks++;
-      const d = (steps[i].seat - steps[i - 1].seat + 6) % 6;
-      expect(d, `同街内行动 ${steps[i - 1].seat} -> ${steps[i].seat} 不应原地重复`).not.toBe(0);
-      expect(
-        d,
-        `同街内行动 ${steps[i - 1].seat} -> ${steps[i].seat} 必须顺时针前进（不得回头）`,
-      ).toBeLessThanOrEqual(3);
+      const d = (cur.seat - prev.seat + N) % N;
+      expect(d, `同街内行动 ${prev.seat} -> ${cur.seat} 不应原地重复`).not.toBe(0);
+      // 中间被跳过的座位必须「不能行动」：已弃牌 / 已全下 / 玩家自己（玩家动作不显示思考光晕）
+      for (let k = 1; k < d; k++) {
+        const s = (prev.seat + k) % N;
+        const cannotAct = cur.folded.includes(s) || cur.allIn.includes(s) || s === cur.hero;
+        expect(
+          cannotAct,
+          `同街内 ${prev.seat} -> ${cur.seat} 跳过了仍可行动的座位 ${s}` +
+            `（folded=${cur.folded.join(',')} allIn=${cur.allIn.join(',')} hero=${cur.hero}）`,
+        ).toBe(true);
+      }
     }
     expect(sameStreetChecks, '应至少观察到一次同街内的连续行动').toBeGreaterThan(0);
   });

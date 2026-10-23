@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 基于 2026-10-19 全方位评估报告（`poker-trainer-assessment-report.md`）的修复批次。
+本 `[Unreleased]` 段包含两批改动：本节的评估修复批次，以及文末的
+「第二批：AI 节奏与决策行为」（AI 思考时长、弃牌后流程、跟注率与去机械化）。
 **`src/core/` 零改动**（14 个文件哈希未变，`git status --short -- src/core` 为空），
 金额与结算逻辑不受影响。
 
@@ -77,6 +79,92 @@
 - 本批次**未**实施评估报告中列为「建议/可选」但未要求立即实施的项（M1–M4、M7–M10、L1–L8），
   例如 ESLint 引入、`verify` 分层、历史重新复盘、加注快捷键、归档清理机制等。
 - `main` 分支保护（H6）属**仓库设置**而非代码改动，单独处理。
+
+### 第二批：AI 节奏与决策行为（2026-10-23）
+
+三项产品改进：**AI 决策耗时模拟真人**、**玩家弃牌后由 AI 按正常流程打完**、
+**下调偏高的跟注率并让决策带波动**。`src/core/` 仍**零改动**（14 个文件哈希未变），
+金额与结算逻辑不受影响。
+
+#### 新增
+
+- **AI 思考时长随机化（`src/ui/thinkTiming.ts`，新文件）**
+  - 区间 `AI_THINK_RANGE = { minMs: 1100, maxMs: 2400 }`。下限取 1100ms 是为了满足
+    「不允许 1 秒内出决策」并留 100ms 调度余量；上限取 2400ms 是因为一手 6 人桌通常
+    有 12–20 次 AI 决策，再高会让单手墙钟超过 40 秒、训练节奏明显变慢。
+  - 抽样方式：把 `seed|revision|seat` 经 FNV-1a + fmix32 映射到 `[0,1)`，再线性映射到区间。
+    **刻意不用 `Math.random()`**：`step` 在每次渲染都会重算，`Math.random()` 会在 React
+    StrictMode 双渲染里抽出两个不同值，而上层定时器依赖的 `step` 身份只在 `stepKey`
+    变化时更新 —— 结果是「画面显示的等待」与「实际等待」不一致，且 E2E 无法复现。
+    哈希派生保证**同一个 ai-action 步永远只对应一个时长**，重渲染 / effect 重跑都不会重抽。
+  - 接线（`src/ui/useTableShowcase.ts`）：新增 `aiThinkDelay` 的 `useMemo`，并让
+    `stableStep` 对 `ai-action` 步覆盖 `delayMs`；`board` / `settle` / `hero-action`
+    步仍用 `planShowcaseStep` 的确定值（它们不是「AI 思考」，不该随机化）。
+  - **只影响等待，不影响决策**：`thinkTiming.ts` 不 import `src/ai/**` / `src/core/**`
+    任何东西（单测用静态断言守住），`stepAiAction` / `decideAI` 的入参一个都没变。
+  - `prefers-reduced-motion: reduce` 下仍为 0 等待（保持原有可访问性语义，未改动）。
+  - 实测（E2E 一手 6 人桌）：17 次 AI 决策耗时 1114 / 1156 / 1261 / 1366 / 1510 / 1593 /
+    1817 / 1909 / 1984 / 2044 / 2052 / 2074 / 2156 / 2202 / 2207 / 2313 / 2332 ms，
+    **无一次 < 1 秒**，极差 1218ms。
+  - **代价（需知悉）**：单手墙钟由约 8–14 秒增至约 20–35 秒（实测翻前弃牌后打完整手 31.04 秒）。
+- **弃牌后流程的回归测试（`tests/e2e/fold-flow.spec.ts`，新文件）**：3 条用例，
+  断言「弃牌后仍有 ≥2 次 AI 动作气泡」「公共牌逐张揭示不跳变」「结算面板出现」。
+
+#### 修复
+
+- **全下摊牌时结算面板先于公共牌揭示出现**
+  - **触发条件**：任意 `finishReason === 'showdown'` 且引擎在 `finish()` 前一次性补满公共牌的牌局
+    （典型是翻前全员 all-in，`runOutBoard` 一次补 5 张）。
+  - **影响组件**：`src/ui/useTableShowcase.ts` 的「结算停顿」`useEffect`。
+  - **根因**：该 effect 只按 `st.finished` 计时 `settleMs`（640ms）就 `setSettleHold(true)`，
+    **不等揭示游标 `revealedBoard` 追平 `st.board.length`**；而 `view.settled = finished && settleHold`
+    直接驱动结算面板渲染。`planShowcaseStep` 本身顺序是对的（先 `board` 步再 `settle` 步），
+    但这条 effect 是另一条独立路径，绕过了它。
+  - **实测影响**（修复前，6 人桌 `startingStack=20`）：弃牌 → 结算面板 1.91s，
+    面板出现时 `data-revealed=0`；随后 0→1→2→3→4→5 全部发生在**面板背后**，
+    玩家看不到这手牌是怎么结束的。
+  - **修复方式**：effect 内加 `if (revealedBoard < st.board.length) return;` 并把
+    `revealedBoard` / `st?.board.length` 加入依赖数组。同时把 dev-only 不变量的判据
+    从 `st.finished` 改为 `settleHold` —— 否则「引擎已 finish、演出层还在逐张追」的
+    那几帧会被误判为违规并抛错。
+  - **验证**：修复后同一场景实测「弃牌 → 结算 10.29s，结算时 `boardRevealed=5`」，
+    该用例已从 `test.fixme` 转为常规回归断言。
+  - **对「弃牌后像直接演算给答案」的实测解释**（三个成因，按可能性排序）：
+    ① 系统开启了「减少动态效果」——实测整手 0.14s 演完（20–30 次 AI 动作全在 82ms 内）；
+    ② 单挑 / 只剩两人时弃牌按规则**立即结束**——实测 0.94s、AI 动作 0 次（合法结局，不是缺陷）；
+    ③ 修复前每步只有 560ms，一条街 5 家约 3 秒走完，肉眼容易看成「一闪而过」。
+    本次任务一已把 ③ 从 560ms 提升到 1.1–2.4s。
+
+#### 变更
+
+- **AI 跟注率下调 + 决策去机械化（`src/ai/tiers.ts` / `src/ai/policy.ts`）**
+  - `AITierParams` 新增三个字段（既有 8 个字段**未改动**）：
+    `callFrequency`（满足赔率时仍跟注的概率门）、`looseCallChance`（不满足赔率时仍宽松跟注的概率门）、
+    `strengthJitter`（手牌强度抖动幅度）。
+  - 取值：easy `0.88 / 0.45 / 0.10`、medium `0.72 / 0.30 / 0.08`、hard `1.0 / 0 / 0.04`。
+  - `policy.ts` 改动两处：① 计算 `strength` 后叠加 `±strengthJitter` 的均匀噪声（夹到 `[0,1]`），
+    使同一局面不再恒定输出同一动作；② 把原来「赔率不达标就**无条件**宽松跟注」改成概率门
+    （`okToCall` 成立时按 `callFrequency` 跟注，否则按 `looseCallChance` 宽松跟注，其余弃牌）。
+  - **hard 档 `strictPotOdds` 语义逐字保留**（胜率不足赔率要求 → 弃牌），两个概率门对它不生效。
+  - **根因确认**：旧逻辑里非 `strictPotOdds` 档在 `okToCall` 不成立时直接落到「宽松跟注」，
+    且 `strength >= preflopThreshold * 0.6`（easy 0.036 / medium 0.204）极易满足 ——
+    所以 easy / medium **面对下注永不弃牌**（实测 fold 0%）。
+  - **改动前后对比**（800 手/档，seed 20260101，6 人桌，同一口径）：
+
+    | 档位 | 面对下注 call | 面对下注 fold | 全部动作 call |
+    |---|---|---|---|
+    | easy | 57.5% → **46.4%** | 0% → 6.5% | 53.2% → 42.8% |
+    | medium | 86.9% → **57.4%** | 0% → **23.6%** | 56.1% → 36.4% |
+    | hard | 27.0% → 26.5%（未上升） | 66.7% → 66.1% | 14.7% → 14.5% |
+
+    medium 的弃牌主路径是新加的「跟注频率门弃牌」（面对下注 22.2%），
+    「赔率不足弃牌」仅 1.4% —— 与根因判断一致（medium 的 `okToCall` 几乎恒真）。
+  - **取舍**：medium `fold` 23.6% 已接近「不超过 25%」的上限，若后续觉得太紧可把
+    `medium.callFrequency` 提到 0.75（预计 call ≈ 60%）。easy 各项都在目标中位。
+  - **验证**：新增 `tests/unit/ai-distribution.test.ts`（5 条：三档接线顺序、medium/easy
+    固定 seed 的统计区间、hard 的 `strictPotOdds` 语义、jitter 生效）；
+    `tests/unit/showcase.test.ts` 的「拆步 vs runAI 同构性」仍逐字节一致
+    （两条路径共用同一 seed 公式、随机数消耗顺序一致）。
 
 ## [1.1.0] - 2026-10-16
 
