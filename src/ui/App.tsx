@@ -204,6 +204,10 @@ export function App() {
     snap.state?.seats[seat]?.name ?? `座位 ${seat + 1}`;
 
   const lastHandNet = snap.lastRecord?.heroNet ?? 0;
+  // 结算面板何时真正出现：牌已打完且演出层已完成停顿。
+  // 它一出现就说明这一手已经演完，牌桌不必再撑满视口，
+  // 让出高度给结算内容（否则「下一手」会被挤到折叠线以下）。
+  const showResult = Boolean(snap.state?.finished && table.view.settled);
 
   // 开始界面：未进桌之前不渲染牌桌与顶部标签栏，
   // 避免「还没开始就能点到设置/统计」的错位感。
@@ -265,7 +269,10 @@ export function App() {
       )}
 
       {tab === 'table' && (
-        <>
+        /* game-stage：把「牌桌 + 操作仪表盘 + 结算面板」作为一个整体，
+           在剩余高度里垂直居中（布局见 app.css 的 .game-stage）。
+           空白区域过大时靠它把内容拉到视口中部，而不是全部堆在顶部。 */
+        <div className={`game-stage${showResult ? ' has-result' : ''}`}>
           {!snap.state ? (
             <div className="panel">
               <div className="empty">正在发牌…</div>
@@ -297,77 +304,83 @@ export function App() {
             </div>
           )}
 
-          {snap.state?.finished && table.view.settled && (
-            <div className="panel" style={{ marginTop: 16 }}>
+          {showResult && snap.state && (
+            <div className="panel result-panel">
               <h2>本手结果</h2>
-              <div className="stats-grid">
-                <div className="stat">
-                  <div className="k">你的净盈亏</div>
-                  <div className={`v ${lastHandNet >= 0 ? 'pos' : 'neg'}`}>
-                    {lastHandNet >= 0 ? '+' : ''}
-                    {lastHandNet}
+              <div className="result-grid">
+                <div className="result-col">
+                  <div className="stats-grid">
+                    <div className="stat">
+                      <div className="k">你的净盈亏</div>
+                      <div className={`v ${lastHandNet >= 0 ? 'pos' : 'neg'}`}>
+                        {lastHandNet >= 0 ? '+' : ''}
+                        {lastHandNet}
+                      </div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">结束方式</div>
+                      <div className="v" style={{ fontSize: 15 }}>
+                        {snap.state.finishReason === 'showdown' ? '摊牌（Showdown）' : '对手弃牌'}
+                      </div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">底池</div>
+                      <div className="v">{snap.state.pots.reduce((a, p) => a + p.amount, 0)}</div>
+                    </div>
+                    <div className="stat">
+                      <div className="k">底池层数</div>
+                      <div className="v">{snap.state.pots.length}</div>
+                    </div>
                   </div>
-                </div>
-                <div className="stat">
-                  <div className="k">结束方式</div>
-                  <div className="v" style={{ fontSize: 15 }}>
-                    {snap.state.finishReason === 'showdown' ? '摊牌（Showdown）' : '对手弃牌'}
-                  </div>
-                </div>
-                <div className="stat">
-                  <div className="k">底池</div>
-                  <div className="v">{snap.state.pots.reduce((a, p) => a + p.amount, 0)}</div>
-                </div>
-                <div className="stat">
-                  <div className="k">底池层数</div>
-                  <div className="v">{snap.state.pots.length}</div>
-                </div>
-              </div>
 
-              {settlementLines.length > 0 && (
-                <>
-                  <h3>分配明细（主池 / 边池 / 未跟注退还）</h3>
-                  <table className="settlement-table">
-                    <thead>
-                      <tr>
-                        <th>类型</th>
-                        <th>金额</th>
-                        <th>归属</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {settlementLines.map((line) => (
-                        <tr key={`${line.layerIndex}-${line.kind}`}>
-                          <td>
-                            {line.kind === 'uncalled' ? (
-                              <span className="tag ok">未跟注退还</span>
-                            ) : line.layerIndex === 0 ? (
-                              <span className="tag">主池</span>
-                            ) : (
-                              <span className="tag">边池 {line.layerIndex}</span>
-                            )}
-                          </td>
-                          <td className="num">{line.amount}</td>
-                          <td>{line.recipients.map(seatLabelOf).join('、') || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="muted small" style={{ marginTop: 6 }}>
-                    「未跟注退还」是你自己下注后无人跟到的部分，会原样退回，不计入赢来的筹码。
+                  <div className="action-row" style={{ marginTop: 12 }}>
+                    <button className="primary" onClick={() => setTab('review')}>
+                      查看复盘
+                    </button>
+                    <button onClick={handleNextHand}>下一手</button>
                   </div>
-                </>
-              )}
+                </div>
 
-              <div className="action-row" style={{ marginTop: 12 }}>
-                <button className="primary" onClick={() => setTab('review')}>
-                  查看复盘
-                </button>
-                <button onClick={handleNextHand}>下一手</button>
+                <div className="result-col">
+                  {settlementLines.length > 0 && (
+                    <>
+                      <h3>分配明细（主池 / 边池 / 未跟注退还）</h3>
+                      <table className="settlement-table">
+                        <thead>
+                          <tr>
+                            <th>类型</th>
+                            <th>金额</th>
+                            <th>归属</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {settlementLines.map((line) => (
+                            <tr key={`${line.layerIndex}-${line.kind}`}>
+                              <td>
+                                {line.kind === 'uncalled' ? (
+                                  <span className="tag ok">未跟注退还</span>
+                                ) : line.layerIndex === 0 ? (
+                                  <span className="tag">主池</span>
+                                ) : (
+                                  <span className="tag">边池 {line.layerIndex}</span>
+                                )}
+                              </td>
+                              <td className="num">{line.amount}</td>
+                              <td>{line.recipients.map(seatLabelOf).join('、') || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="muted small" style={{ marginTop: 6 }}>
+                        「未跟注退还」是你自己下注后无人跟到的部分，会原样退回，不计入赢来的筹码。
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {tab === 'review' && <ReviewPanel record={snap.lastRecord} review={snap.lastReview} />}
