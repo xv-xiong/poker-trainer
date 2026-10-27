@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ACTION_LABELS, type ActionType } from '../../core/types.js';
 import type { LegalActions } from '../../core/betting.js';
+import '../styles/actionbar.css';
 
 export function ActionBar({
   legal,
@@ -154,7 +155,7 @@ export function ActionBar({
     : `${ACTION_LABELS.call.zh}（Call） ${legal?.callAmount ?? 0}`;
 
   return (
-    <div className="action-panel sc-my-turn" data-testid="action-my-turn">
+    <div className="action-panel sc-my-turn hint-host" data-testid="action-my-turn">
       <h3>你的行动</h3>
 
       <div className="action-row">
@@ -208,27 +209,29 @@ export function ActionBar({
       </button>
 
       {hint && (
-        <div className="hint-box">
-          <div className="kv">
-            <span className="k">估算胜率</span>
-            <span className="v">{(hint.equity * 100).toFixed(1)}%</span>
-          </div>
-          <div className="bar">
-            <span style={{ width: `${Math.min(100, hint.equity * 100)}%` }} />
-          </div>
-          <div className="kv">
-            <span className="k">底池赔率要求</span>
-            <span className="v">{(hint.potOdds * 100).toFixed(1)}%</span>
-          </div>
-          <div className="bar warn">
-            <span style={{ width: `${Math.min(100, hint.potOdds * 100)}%` }} />
-          </div>
-          <div className="kv">
-            <span className="k">建议</span>
-            <span className="v">{hint.action}</span>
-          </div>
-          <div className="muted small">
-            来源：{hint.source === 'lookup' ? '查表值' : hint.source === 'exact' ? '精确枚举值' : '蒙特卡洛采样值'}
+        <div className="hint-pop">
+          <div className="hint-box">
+            <div className="kv">
+              <span className="k">估算胜率</span>
+              <span className="v">{(hint.equity * 100).toFixed(1)}%</span>
+            </div>
+            <div className="bar">
+              <span style={{ width: `${Math.min(100, hint.equity * 100)}%` }} />
+            </div>
+            <div className="kv">
+              <span className="k">底池赔率要求</span>
+              <span className="v">{(hint.potOdds * 100).toFixed(1)}%</span>
+            </div>
+            <div className="bar warn">
+              <span style={{ width: `${Math.min(100, hint.potOdds * 100)}%` }} />
+            </div>
+            <div className="kv">
+              <span className="k">建议</span>
+              <span className="v">{hint.action}</span>
+            </div>
+            <div className="muted small">
+              来源：{hint.source === 'lookup' ? '查表值' : hint.source === 'exact' ? '精确枚举值' : '蒙特卡洛采样值'}
+            </div>
           </div>
         </div>
       )}

@@ -232,8 +232,9 @@ scripts/             构建期生成脚本 + 一键验收
 | G8 | 端到端：全链路跑通、无 console error、历史入库、快捷键、移动端布局 |
 | G9 | 类型检查 + 生产构建 + 产物存在性（含 Web Worker chunk） |
 | G10 | 持久化健壮性：迁移、损坏数据不白屏、FIFO 上限 |
+| G11 | dev 冒烟：vite dev 下连打 3 手、点「下一手」不白屏（生产构建看不到这类缺陷） |
 
-当前规模：单元与属性测试 **16 个文件 / 225 个用例**，E2E **35 个用例**（含线上部署验收，未配置 `LIVE_URL` 时跳过）。
+当前规模：单元与属性测试 **18 个文件 / 249 个用例**，E2E **45 个用例**（含线上部署验收，未配置 `LIVE_URL` 时跳过）。
 
 另有针对性回归测试覆盖下列已修缺陷：
 
@@ -248,6 +249,9 @@ scripts/             构建期生成脚本 + 一键验收
 | 玩家弃牌后直接给出结果、不继续演算 | `tests/e2e/fold-flow.spec.ts` |
 | 全下摊牌时结算面板先于公共牌揭示出现 | `tests/e2e/fold-flow.spec.ts`（第三个用例） |
 | AI 面对下注永不弃牌、跟注率过高 | `tests/unit/ai-distribution.test.ts` |
+| 复盘「建议动作」恒为加注（EV 模型弃牌概率与牌力无关） | `tests/unit/review-distribution.test.ts` |
+| 开发模式点「下一手」白屏（揭示游标跨手残留） | `tests/unit/showcase-cursor.test.ts`、`scripts/dev-smoke.mjs`（G11） |
+| 九人桌漏座 / 手机座位重叠 / 结算态压住公共牌 | `tests/unit/table-order.test.ts`、`tests/e2e/geometry.spec.ts` |
 
 ---
 

@@ -236,3 +236,113 @@ describe('缺陷 2 补充：座位的视觉顺时针顺序必须与行动顺序�
     }
   });
 });
+
+describe('缺陷 3：座位布局必须是双射，且槽位分区覆盖全部座位（回归：9 人桌漏画一名玩家）', () => {
+  /**
+   * 已报告缺陷：九人桌只画出 8 名玩家——`.seat` 有 9 个节点，但 data-seat 序列是
+   * 2,3,4,5,6,7,1,7,0（座位 7 出现两次、座位 8 从未渲染）。
+   *
+   * 根因不在坐标算式本身，而在**渲染侧用坐标阈值反推槽位**：
+   *   topRow = others.filter(p => p.y < 30)
+   *   left   = others.find(p => p.x < 25)
+   *   right  = others.find(p => p.x > 75)
+   * n >= 7 时顶排 x = ((i+1)/(topCount+1))*100 会落到 14.3%…85.7%，
+   * 首尾越过 25 / 75 阈值，于是顶排座位同时被当成 left/right 再渲染一次：
+   * find 先命中的那个顶排座位被画两遍，真正的 rightSeat（x=93）永远轮不到。
+   * n=6 时顶排 x 恰为 25/50/75 不越界，所以六人桌看不出来。
+   *
+   * 修法是让 computePlacements 直接给出 slot（top/left/right/bottom），
+   * 渲染侧只按 slot 分区，不再从坐标反推。以下断言把「双射 + 槽位覆盖」钉住。
+   */
+  it('n=2..9、任意 hero：座位号唯一且恰好覆盖 0..n-1', () => {
+    for (let n = 2; n <= 9; n++) {
+      for (let hero = 0; hero < n; hero++) {
+        const ps = computePlacements(n, hero);
+        expect(ps, `${n} 人桌 hero=${hero} 座位数`).toHaveLength(n);
+        const idx = ps.map((p) => p.index).sort((a, b) => a - b);
+        expect(idx, `${n} 人桌 hero=${hero} 座位号必须覆盖 0..${n - 1}`).toEqual(
+          Array.from({ length: n }, (_, i) => i),
+        );
+      }
+    }
+  });
+
+  it('n=2..9、任意 hero：bottom 只能是玩家，left/right 各一个，其余全在 top', () => {
+    for (let n = 2; n <= 9; n++) {
+      for (let hero = 0; hero < n; hero++) {
+        const ps = computePlacements(n, hero);
+        const bottom = ps.filter((p) => p.slot === 'bottom');
+        const left = ps.filter((p) => p.slot === 'left');
+        const right = ps.filter((p) => p.slot === 'right');
+        const top = ps.filter((p) => p.slot === 'top');
+
+        expect(bottom.map((p) => p.index), `${n}p hero=${hero} bottom 必须且只能是玩家`).toEqual([
+          hero,
+        ]);
+        // 2 / 3 人桌是专门的对称布局，没有独立的左右槽位
+        expect(left.length, `${n}p hero=${hero} left 数量`).toBe(n >= 4 ? 1 : 0);
+        expect(right.length, `${n}p hero=${hero} right 数量`).toBe(n >= 4 ? 1 : 0);
+        expect(
+          top.length + left.length + right.length + bottom.length,
+          `${n}p hero=${hero} 槽位必须覆盖全部座位`,
+        ).toBe(n);
+
+        // 三个「单座位槽位」不得指向同一个座位——这正是重复渲染的形态
+        const singles = [...left, ...right, ...bottom].map((p) => p.index);
+        expect(
+          new Set(singles).size,
+          `${n}p hero=${hero} 单座位槽位出现重复：${singles.join(',')}`,
+        ).toBe(singles.length);
+      }
+    }
+  });
+
+  it('顶排座位不得同时落在 left/right 槽位（回归：9 人桌 7 号座被画两次、8 号座消失）', () => {
+    for (let n = 4; n <= 9; n++) {
+      for (let hero = 0; hero < n; hero++) {
+        const ps = computePlacements(n, hero);
+        const topIdx = ps.filter((p) => p.slot === 'top').map((p) => p.index);
+        const sideIdx = ps
+          .filter((p) => p.slot === 'left' || p.slot === 'right')
+          .map((p) => p.index);
+        for (const i of sideIdx) {
+          expect(topIdx, `${n}p hero=${hero} 座位 ${i} 同时被当成顶排和侧边`).not.toContain(i);
+        }
+      }
+    }
+  });
+
+  /**
+   * 视觉顺时针顺序必须与座次顺序一致（n=2..9 全覆盖）。
+   * 这里重新写一份极角排序：上面 describe 里的同名函数是块级作用域，不可复用。
+   */
+  function clockwiseOrder(n: number, hero: number): number[] {
+    const ps = computePlacements(n, hero);
+    const sorted = [...ps]
+      .map((p) => {
+        // 屏幕坐标 y 向下：以「正上方」为 0、顺时针为正的角度
+        const ang = Math.atan2(p.x - 50, 50 - p.y);
+        return { index: p.index, ang: (ang + 2 * Math.PI) % (2 * Math.PI) };
+      })
+      .sort((a, b) => a.ang - b.ang)
+      .map((x) => x.index);
+    const at = sorted.indexOf(hero);
+    expect(at, `hero=${hero} 未出现在布局中`).toBeGreaterThanOrEqual(0);
+    return [...sorted.slice(at), ...sorted.slice(0, at)];
+  }
+
+  it('n=2..9、任意 hero：视觉顺时针顺序 = 座次顺序（相邻严格步进 1）', () => {
+    for (let n = 2; n <= 9; n++) {
+      for (let hero = 0; hero < n; hero++) {
+        const order = clockwiseOrder(n, hero);
+        const expected = Array.from({ length: n }, (_, i) => (hero + i) % n);
+        expect(order, `${n} 人桌 hero=${hero} 视觉顺时针顺序与座次顺序不一致`).toEqual(expected);
+        // 再直接断言「步进」：相邻两个座位在座次上恰好差 1（模 n）
+        for (let i = 1; i < order.length; i++) {
+          const step = (order[i]! - order[i - 1]! + n) % n;
+          expect(step, `${n}p hero=${hero} 从座位 ${order[i - 1]} 到 ${order[i]} 不是顺时针下一步`).toBe(1);
+        }
+      }
+    }
+  });
+});

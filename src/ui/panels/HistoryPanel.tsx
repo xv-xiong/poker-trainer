@@ -2,7 +2,7 @@
  * 历史面板：最近手牌列表 + 导出（JSON / CSV）。
  */
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { ACTION_LABELS, STREET_LABELS, type HandRecord } from '../../core/types.js';
 import { cardToString } from '../../core/cards.js';
 import { exportCsv, exportJson, downloadText } from '../../store/export.js';
@@ -64,8 +64,8 @@ export function HistoryPanel({
               const deviations = h.review.filter((r) => r.grade !== 'ok').length;
               const isOpen = expanded === h.handId;
               return (
-                <>
-                  <tr key={h.handId}>
+                <Fragment key={h.handId}>
+                  <tr>
                     <td className="num">{h.handId}</td>
                     <td>{hole.map(cardToString).join(' ')}</td>
                     <td>{h.board.map(cardToString).join(' ') || '—'}</td>
@@ -116,7 +116,7 @@ export function HistoryPanel({
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>

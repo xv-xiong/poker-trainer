@@ -96,15 +96,8 @@
   .felt {
     min-height: 400px;
   }
-  .seat-slot {
-    transform: translate(-50%, -50%) scale(0.92);
-  }
-}
-
-@media (max-width: 560px) {
-  .seat-slot {
-    transform: translate(-50%, -50%) scale(0.82);
-  }
+  /* 座位尺寸统一交给 app.css 的「座位密度」容器查询，这里不再叠加 scale 缩放：
+     叠加后字号会被二次压小（9px → 7.4px），且与密度分档互相干扰。 */
 }
 
 /* ---------- 公共牌：逐张发出 ---------- */

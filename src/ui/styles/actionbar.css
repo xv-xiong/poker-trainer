@@ -1,0 +1,38 @@
+/**
+ * 操作仪表盘里「查看提示」弹层的定位（P1-2 修复）。
+ *
+ * 旧行为：点「查看提示」后，提示框作为**整行块**插进仪表盘内部，
+ * 面板高度从约 100px 涨到 240px，把「建议」行推出视口、
+ * 并让整个游戏区重新垂直居中（牌桌跟着跳一下）。
+ *
+ * 新行为：提示框绝对定位浮在仪表盘**上方**，不参与流式布局，
+ * 因此展开/收起都不改变面板高度、牌桌不位移。
+ * 只在 ≥901px 生效：窄屏仪表盘本身是贴底可滚动抽屉，提示留在流内更好读。
+ */
+
+@media (min-width: 901px) {
+  /* 提示框的定位参照物。选择器带上 .table-wrap 与 .hint-host 提高权重，
+     避免被 app.css 里 `.table-wrap > .action-panel` 的 position 覆盖。 */
+  .table-wrap > .action-panel.hint-host {
+    position: relative;
+  }
+
+  .hint-pop {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%);
+    z-index: 20;
+    width: min(560px, 100%);
+    max-height: 46vh;
+    overflow-y: auto;
+  }
+
+  /* 浮层需要不透明底与阴影，否则会与牌桌上的牌/座位文字叠在一起看不清 */
+  .hint-pop > .hint-box {
+    margin: 0;
+    background: var(--panel);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+    border: 1px solid var(--line-strong);
+  }
+}

@@ -1,7 +1,7 @@
 /**
  * 一键验收闸门：npm run verify
  *
- * 顺序执行 10 项闸门，任一失败即整体失败（非零退出）。
+ * 顺序执行 11 项闸门，任一失败即整体失败（非零退出）。
  * 这是「完成」的机器定义——不依赖人记得检查什么。
  *
  * G1  5 张牌型直方图（精确枚举值基准，全量 C(52,5)）
@@ -14,6 +14,15 @@
  * G8  端到端（Playwright，无 console error + 全链路）
  * G9  构建与产物（tsc + vite build + preview HTTP 200）
  * G10 持久化健壮性（迁移 + 损坏不白屏）
+ * G11 dev 冒烟（vite dev + 连打 3 手，断言「下一手」不白屏）
+ *
+ * ## 为什么需要 G11
+ *
+ * 有一类缺陷**只存在于开发模式**：`process.env.NODE_ENV === 'production'`
+ * 的静态替换会把 dev-only 不变量整块摇掉，而 G8 跑的是 `vite preview`
+ * （生产构建），所以「开发模式下点下一手白屏」这种崩溃在 G8 里永远看不到
+ * （实测在 dist 产物里 grep 该错误文本命中 0）。
+ * 立规矩：只在开发期生效的不变量，必须有一条在开发期跑的自动化用例。
  */
 
 import { spawnSync } from 'node:child_process';
@@ -77,8 +86,16 @@ if (tscOk) {
   }
 }
 
-// ---- G8 端到端 ----
+// ---- G11 dev 冒烟（必须用 vite dev，不能用 preview）----
+// 依赖 @playwright/test 驱动浏览器；未安装时跳过而不是失败。
 const hasBrowsers = existsSync(join(root, 'node_modules', '@playwright', 'test'));
+if (hasBrowsers) {
+  run('G11 dev 冒烟（vite dev + 连打 3 手不白屏）', 'node', ['scripts/dev-smoke.mjs']);
+} else {
+  skip('G11 dev 冒烟', '@playwright/test 未安装');
+}
+
+// ---- G8 端到端 ----
 if (hasBrowsers) {
   run('G8 端到端（Playwright + vite preview）', npx, ['playwright', 'test']);
 } else {

@@ -18,11 +18,24 @@ import type { ShowcaseView } from '../useTableShowcase.js';
 import { seatRoles } from '../../core/pot.js';
 import { STREET_LABELS, type HandState } from '../../core/types.js';
 
-/** 座位在牌桌上的位置（百分比坐标）。 */
+/** 座位所在的布局槽位（环绕牌桌的四段）。 */
+export type SeatSlot = 'top' | 'left' | 'right' | 'bottom';
+
+/** 座位在牌桌上的位置（百分比坐标）与所属槽位。 */
 export interface SeatPlacement {
   index: number;
   x: number;
   y: number;
+  /**
+   * 槽位：渲染时必须按槽位分组，**不要**再用 x / y 阈值反推。
+   *
+   * 曾经的 `others.find(p => p.x < 25)` / `find(p => p.x > 75)` 在 7 人及以上
+   * 会把顶排座位也判成左 / 右侧：顶排 x = ((i+1)/(topCount+1))*100 在 9 人桌
+   * 是 14.3%…85.7%，首尾两个正好越过 25 / 75 阈值，于是同一个座位被渲染两次、
+   * 另一个座位完全不渲染（实测九人桌 9 个 `.seat` 的 data-seat 是
+   * 2,3,4,5,6,7,1,7,0 —— 座位 7 重复、座位 8 缺失）。
+   */
+  slot: SeatSlot;
 }
 
 /** 飞筹码的终点：桌面中心（`.table-center` 居中）。 */
@@ -64,41 +77,42 @@ export function computePlacements(seatCount: number, heroSeat: number): SeatPlac
 
   if (n === 2) {
     // 单挑：对手在正上方（从玩家出发顺时针的唯一位置）
-    out.push({ index: (heroSeat + 1) % n, x: 50, y: 10 });
-    out.push({ index: heroSeat, x: 50, y: 90 });
+    out.push({ index: (heroSeat + 1) % n, x: 50, y: 10, slot: 'top' });
+    out.push({ index: heroSeat, x: 50, y: 90, slot: 'bottom' });
     return out;
   }
 
   if (n === 3) {
     // 3 人：顺时针为 下(玩家) → 左 → 右
-    out.push({ index: (heroSeat + 1) % n, x: 22, y: 14 });
-    out.push({ index: (heroSeat + 2) % n, x: 78, y: 14 });
-    out.push({ index: heroSeat, x: 50, y: 90 });
+    out.push({ index: (heroSeat + 1) % n, x: 22, y: 14, slot: 'top' });
+    out.push({ index: (heroSeat + 2) % n, x: 78, y: 14, slot: 'top' });
+    out.push({ index: heroSeat, x: 50, y: 90, slot: 'bottom' });
     return out;
   }
 
   // 4 人及以上：按「左侧 → 顶排 → 右侧」的顺时针槽位顺序分配座次。
+  // 分配用下标算术表达，保证**双射**：others 有 n-1 个 = 左 1 + 顶 (n-3) + 右 1，
+  // 恰好把 0..n-1 每个座号覆盖一次（n=4..9 由单测逐人数、逐 hero 核对）。
   const others: number[] = [];
   for (let i = 1; i < n; i++) others.push((heroSeat + i) % n);
 
-  // 顶排座位数：其余分给左右两侧（各 1 个）。保持与旧布局相同的视觉密度。
-  const topCount = others.length - 2;
+  const topCount = n - 3; // 顶排座位数：4 人桌 1 个，9 人桌 6 个
   const leftSeat = others[0];
   const topSeats = others.slice(1, 1 + topCount);
-  const rightSeat = others[topCount + 1];
+  const rightSeat = others[1 + topCount]; // 最后一个（others 长度 n-1，末下标 n-2）
 
   // 左侧（顺时针第一个）：y 取中部偏下，视觉上紧跟玩家之后
-  out.push({ index: leftSeat, x: 7, y: 46 });
+  out.push({ index: leftSeat, x: 7, y: 46, slot: 'left' });
 
   // 顶排：从左到右均匀铺开，正好对应顺时针的中间段
   topSeats.forEach((idx, i) => {
-    out.push({ index: idx, x: ((i + 1) / (topSeats.length + 1)) * 100, y: 10 });
+    out.push({ index: idx, x: ((i + 1) / (topSeats.length + 1)) * 100, y: 10, slot: 'top' });
   });
 
   // 右侧（顺时针最后一个）
-  if (rightSeat !== undefined) out.push({ index: rightSeat, x: 93, y: 46 });
+  out.push({ index: rightSeat, x: 93, y: 46, slot: 'right' });
 
-  out.push({ index: heroSeat, x: 50, y: 90 });
+  out.push({ index: heroSeat, x: 50, y: 90, slot: 'bottom' });
   return out;
 }
 
@@ -121,12 +135,14 @@ export function TableView({
 
   const placements = useMemo(() => computePlacements(n, heroSeat), [n, heroSeat]);
   const placement = (idx: number): SeatPlacement =>
-    placements.find((p) => p.index === idx) ?? { index: idx, x: 50, y: 50 };
+    placements.find((p) => p.index === idx) ?? { index: idx, x: 50, y: 50, slot: 'top' };
 
-  const others = placements.filter((p) => p.index !== heroSeat);
-  const topRow = others.filter((p) => p.y < 30);
-  const left = others.find((p) => p.x < 25) ?? null;
-  const right = others.find((p) => p.x > 75) ?? null;
+  // 按槽位分组渲染。**不要**用 x / y 阈值反推左右侧：7 人及以上顶排会铺到
+  // x < 25 / x > 75（九人桌顶排 x 是 14.3%…85.7%），阈值反推会把顶排座位
+  // 重复渲染成左 / 右侧 —— 实测九人桌 9 个 .seat 里座位 7 出现两次、座位 8 消失。
+  const topRow = placements.filter((p) => p.slot === 'top');
+  const left = placements.find((p) => p.slot === 'left') ?? null;
+  const right = placements.find((p) => p.slot === 'right') ?? null;
 
   const shownBoard = view ? view.shownBoard : state.board;
   /** 本街发牌过程中，最近一张公共牌播放发牌动画。 */
@@ -209,7 +225,7 @@ export function TableView({
     : null;
 
   return (
-    <div className="felt" data-testid="felt">
+    <div className="felt" data-testid="felt" data-seat-count={n}>
       {/* 飞向底池的筹码（纯 CSS 动画，不占用任何 JS 定时器） */}
       {chipFlier && (
         <span

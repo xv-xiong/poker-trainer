@@ -16,8 +16,10 @@
  *
  * ── 硬约束 ────────────────────────────────────────────────────
  *   - **只改变「什么时候调用」，不改变「调用什么」**：
- *     `ai-action` 步最终仍调用 `controller.runAI()`（每步一次，其内部 `while`
- *     自然只会推进一名 AI，见 `tests/unit/showcase.test.ts` 的同构性断言）；
+ *     `ai-action` 步调用 `src/ui/showcaseStep.ts` 的 `stepAiAction()`，
+ *     它逐字复刻 `GameController.runAI()` 循环体的一次迭代（同一 RNG 派生、
+ *     同一兜底逻辑），因此两条路径对同一状态产出相同动作
+ *     （见 `tests/unit/showcase.test.ts` 的同构性断言）。
  *     玩家动作仍由 `<ActionBar>` → `App.handleAct` → `controller.act()` 发起。
  *     本文件不产生任何新的 `applyAction` 调用，也不传任何新参数。
  *   - **重入安全**：本 hook 只在 React 副作用里推进，无飞行中的定时器/微任务；
@@ -27,7 +29,10 @@
  *   - **reduced-motion**：`prefers-reduced-motion: reduce` 时所有等待压到 0。
  *
  * ── 本 hook 不碰任何规则 ──────────────────────────────────────
- *   不 import `src/core/*` 的任何值，只读 `HandState` 的字段做展示判断。
+ *   不 import `src/core/*` 的**规则函数或状态构造**（如 `applyAction`、`createHand`），
+ *   只读 `HandState` 的字段做展示判断。
+ *   唯一从 core 引入的**值**是 `ACTION_LABELS`——纯展示用的中文标签字典，
+ *   不含任何规则逻辑（引入它是为了避免 UI 层重复维护一份动作名）。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -195,6 +200,78 @@ export function boardCountForStreet(street: Street): number {
   }
 }
 
+/**
+ * 公共牌揭示游标：**带手牌作用域**的「已揭示张数」。
+ *
+ * 为什么必须把 `handId` 和 `n` 存在一起（而不是只存一个数字 n）：
+ * 换手时若靠 `useEffect` 去 `setRevealedBoard(0)`，那只是一次**排队**的状态
+ * 更新；同一个 commit 里其他 effect（尤其是 dev 不变量自检）读到的仍是旧值
+ * （例如 5），而新牌局的 `board.length` 已经是 0 —— 于是误判「揭示张数超过
+ * 真实公共牌」并抛错。dev 模式下没有 ErrorBoundary，错误会让整棵 React 树
+ * 卸载，表现为点「下一手」后**整页白屏**。
+ *
+ * 改成「游标自带作用域 + 渲染期按 handId 派生」后，换手的**同一帧**里可见
+ * 张数立刻就是 0，不存在新旧值混用的窗口；`n` 只是一个「本手内的进度」，
+ * 跨手时天然失效。
+ */
+export interface BoardCursor {
+  /** 游标所属的手牌 id；`null` 表示还没有任何牌局。 */
+  handId: string | null;
+  /** 本手已揭示的张数（可能暂时超过真实张数，派生时会被 clamp）。 */
+  n: number;
+}
+
+/**
+ * 由游标派生「当前这一手可见的公共牌张数」。
+ *
+ * 三条规则：
+ *   - `cursor.handId !== handId`（换手 / 还没有牌局）→ 0，旧游标一律失效；
+ *   - 同一手内 `n` 可能因牌局回退而大于真实张数 → clamp 到 `boardLen`；
+ *   - 负数（理论上不会出现）也归零，保证返回值永远合法。
+ *
+ * 纯函数、无副作用，渲染期直接调用即可 —— 这正是「派生量」相对「state + 重置
+ * effect」的关键优势：不存在「重置还没生效」的中间帧。
+ */
+export function visibleBoardCountOf(
+  cursor: BoardCursor,
+  handId: string | null,
+  boardLen: number,
+): number {
+  if (cursor.handId !== handId) return 0;
+  return Math.max(0, Math.min(cursor.n, boardLen));
+}
+
+/**
+ * 把游标推进一张（不越过真实张数）；跨手时从 0 重新开始。
+ *
+ * 用于 `run('board')`：`setBoardCursor((prev) => advanceBoardCursor(prev, 当前手, 真实张数))`。
+ * 因为结果恒为 `min(当前可见 + 1, boardLen)`，所以**单调不减**，不会出现
+ * 「游标回退」——旧实现里那条 throw 因此不再需要。
+ */
+export function advanceBoardCursor(
+  cursor: BoardCursor,
+  handId: string | null,
+  boardLen: number,
+): BoardCursor {
+  const current = visibleBoardCountOf(cursor, handId, boardLen);
+  return { handId, n: Math.min(current + 1, boardLen) };
+}
+
+/**
+ * 把游标收敛到合法值；已经合法时**原样返回**（引用不变，避免多余重渲染）。
+ *
+ * 供 dev 不变量自检做「自愈」：发现游标越界时用 console.error 记录并 clamp，
+ * 而不是 throw —— dev 断言的目的应是「让问题可见」，不是「让应用崩溃」。
+ */
+export function clampBoardCursor(
+  cursor: BoardCursor,
+  handId: string | null,
+  boardLen: number,
+): BoardCursor {
+  const n = visibleBoardCountOf(cursor, handId, boardLen);
+  return cursor.handId === handId && cursor.n === n ? cursor : { handId, n };
+}
+
 export function sameSignature(a: ShowcaseSignature, b: ShowcaseSignature): boolean {
   return (
     a.thinking === b.thinking &&
@@ -283,8 +360,8 @@ export function isSettleStep(step: ShowcaseStep): boolean {
  * 设计要点（针对「双重推进导致跳步 / 卡死」这一最容易出 bug 的地方）：
  *   - 所有推进都发生在 effect 内，**不在渲染期做副作用**；
  *   - 每一步的完成条件都是「`snap.revision` 真的变化了」，而不是「定时器到点了」；
- *   - 揭示公共牌的游标由 `revealedBoard` 显式持有，且只在**公共牌数组真的变短**
- *     时才回退（例如重新开局），天然幂等；
+ *   - 揭示公共牌的游标是 `{ handId, n }` 作用域化的**派生量**：换手或牌数变短时
+ *     派生值立刻归零 / clamp，不依赖任何「重置 effect」，天然幂等；
  *   - 结束停顿由 `settleHold` 一次性标记，不会反复触发。
  */
 /**
@@ -310,8 +387,8 @@ function useStableCallback<T extends (...args: never[]) => unknown>(fn: T): T {
  * 设计要点（针对「双重推进导致跳步 / 卡死」这一最容易出 bug 的地方）：
  *   - 所有推进都发生在 effect 内，**不在渲染期做副作用**；
  *   - 每一步的完成条件都是「`snap.revision` 真的变化了」，而不是「定时器到点了」；
- *   - 揭示公共牌的游标由 `revealedBoard` 显式持有，且只在**公共牌数组真的变短**
- *     时才回退（例如重新开局），天然幂等；
+ *   - 揭示公共牌的游标是 `{ handId, n }` 作用域化的**派生量**：换手或牌数变短时
+ *     派生值立刻归零 / clamp，不依赖任何「重置 effect」，天然幂等；
  *   - 结束停顿由 `settleHold` 一次性标记，不会反复触发。
  */
 export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
@@ -338,6 +415,13 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
   const st = snap.state;
 
   /**
+   * 当前手牌 id。必须在游标 state 之前取到：游标是 `{ handId, n }` 作用域化的，
+   * 渲染期就要用它派生可见张数（见下方 `visibleBoardCount`），
+   * 否则换手的同一帧里还会读到旧游标。
+   */
+  const handId = st?.handId ?? null;
+
+  /**
    * 视图重算键。
    *
    * **这是本 hook 最关键的依赖设计。** `applyAction` 是**原地修改** `HandState`
@@ -352,8 +436,16 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
     st?.actingSeat ?? -2
   }|${st?.finished ? 1 : 0}|${st?.street ?? ''}`;
 
-  // 已揭示的公共牌张数（演出游标）
-  const [revealedBoard, setRevealedBoard] = useState(0);
+  // 已揭示的公共牌张数（演出游标）。**带 handId 作用域**：换手后派生值立刻为 0，
+  // 不依赖任何「换手重置」的 effect（那正是 dev 白屏 bug 的根因，详见 BoardCursor 注释）。
+  const [boardCursor, setBoardCursor] = useState<BoardCursor>({ handId: null, n: 0 });
+  /**
+   * 当前这一手可见的公共牌张数 —— **派生量**，渲染期即时计算。
+   *
+   * 全部下游（`view.visibleBoardCount`、结算停顿 gate、dev 自检、调度键）都读它，
+   * 不再读原始 state，因此「换手瞬间」与「board 变短」都不可能读到越界值。
+   */
+  const visibleBoardCount = visibleBoardCountOf(boardCursor, handId, st?.board.length ?? 0);
   // 本手结束后是否已完成「结算停顿」
   const [settleHold, setSettleHold] = useState(false);
   // 演出代数：新一手自增
@@ -374,24 +466,26 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
   const boardLenRef = useRef(0);
   boardLenRef.current = st?.board.length ?? 0;
 
-  // ── 新一手：重置演出游标 ──
-  // 注意依赖里必须用 `st?.handId` 这样的原始值：`snap.state` 是原地修改的对象，
+  // ── 新一手：重置演出状态 ──
+  // 注意依赖里必须用 `handId` 这样的原始值：`snap.state` 是原地修改的对象，
   // 引用不会变，用对象做依赖会漏掉「同一对象换了一手」的情况；
   // 也不能用 `revision`，否则每次动作都会重置游标（公共牌会被反复重发）。
-  const handId = st?.handId ?? null;
+  //
+  // **揭示游标刻意不在这里重置**：它是 `{handId, n}` 作用域化的派生量，
+  // 换手后 `visibleBoardCountOf` 在渲染期直接返回 0，无需 setState。
+  // 这样就不存在「重置排队、同帧断言读到旧值」的窗口——那正是 dev 模式
+  // 点「下一手」整页白屏的根因（旧实现里 `setRevealedBoard(0)` 只是排队，
+  // 而同一个 commit 的不变量自检读到旧游标 5 + 新牌局 board 0 就抛错了）。
+  /** 渲染期同步的当前手牌 id（供身份稳定的 `run` 读取，避免闭包捕获旧值）。 */
+  const handIdLiveRef = useRef<string | null>(null);
+  handIdLiveRef.current = handId;
   useEffect(() => {
     if (handId === handIdRef.current) return;
     handIdRef.current = handId;
     aiGuardRef.current = 0;
-    setRevealedBoard(0);
     setSettleHold(false);
     setEpoch((e) => e + 1);
   }, [handId]);
-
-  // 公共牌变短（重新开局但 handId 相同等边界）时，游标不能超过实际张数
-  useEffect(() => {
-    setRevealedBoard((n) => (n > boardLenRef.current ? boardLenRef.current : n));
-  }, [st?.board.length]);
 
   // ── 揭示公共牌：只由 `board` 步推进 ──
   //
@@ -399,14 +493,15 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
   // 结果与底池/行动步在同一条 effect 队列里竞争，观测到的张数直接从 0 跳到 3
   // （中间态被 React 批处理吃掉）。现在改由 `planShowcaseStep` 产出 `board` 步、
   // 上层按 `revealMs` 排期、`run('board')` 才 +1，每个中间态都必然独立渲染一帧。
-  // 这里只负责「不能超过真实张数」的收敛（防止状态被外部重置后越界）。
+  // 这里不再负责收敛：越界由派生量 `visibleBoardCountOf` 在渲染期 clamp
+  // （另见下方 dev 自检里的「自愈」分支）。
 
   // ── 结算停顿 ──
   //
   // **必须等公共牌全部揭示完，才开始结算停顿。**
   // 为什么：全下摊牌时引擎会在 `finish()` 之前用 `runOutBoard` 一次性把公共牌
   // 补满 5 张（src/core/hand.ts），因此「`st.finished` 变 true」的时刻，演出层
-  // 的揭示游标 `revealedBoard` 可能还停在 0/3/4。若这里只按 `st.finished` 计时，
+  // 的可见张数（派生量 `visibleBoardCount`）可能还停在 0/3/4。若这里只按 `st.finished` 计时，
   // 结算面板会在公共牌一张没翻时就弹出，剩下的牌全部在面板**背后**翻完 ——
   // 玩家看不到「这手是怎么结束的」（实测全下摊牌时 `data-revealed=0` 就出了面板）。
   //
@@ -419,29 +514,46 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
       return;
     }
     if (settleHold) return;
-    if (revealedBoard < (st?.board.length ?? 0)) return; // 等揭示游标追平真实张数
+    if (visibleBoardCount < (st?.board.length ?? 0)) return; // 等揭示游标追平真实张数
     const t = setTimeout(() => setSettleHold(true), Math.max(0, timing.settleMs));
     return () => clearTimeout(t);
-  }, [st?.finished, settleHold, timing.settleMs, epoch, revealedBoard, st?.board.length]);
+  }, [st?.finished, settleHold, timing.settleMs, epoch, visibleBoardCount, st?.board.length]);
 
   // ── 非生产环境不变量自检（第一处：揭示游标）──
   // 这两条是「分步演出」最容易被后续改动破坏的地方，且破坏后表现是
   // 「跳步 / 卡死 / 公共牌提前露出」——纯靠肉眼看动画很难发现。
-  // 因此做成开发期硬断言（生产构建中 `process.env.NODE_ENV` 被 Vite 静态替换，整块被摇掉）。
+  //
+  // **只记录、不 throw**：dev 断言的价值是「让问题可见」，而不是「让整页崩溃」。
+  // 旧实现直接 throw，在没有 ErrorBoundary 的 dev 模式下会把整棵 React 树卸载
+  // （点「下一手」白屏），把一个小状态问题放大成不可用的页面。
+  // 现在改为 console.error + 就地自愈（clamp 到合法值），页面继续可用；
+  // 生产构建中 `process.env.NODE_ENV` 被 Vite 静态替换，整块仍会被摇掉。
   useEffect(() => {
     if (process.env.NODE_ENV === 'production') return;
     if (!st) return;
-    if (revealedBoard > st.board.length) {
-      throw new Error(`[showcase] 揭示的张数 ${revealedBoard} 超过真实公共牌 ${st.board.length}`);
+    // 1) 原始游标越界。派生量 `visibleBoardCount` 已 clamp，这里检查 state 本身，
+    //    目的是让问题在控制台可见，并把 state 收敛回合法值（自愈）。
+    if (boardCursor.handId === handId && boardCursor.n > st.board.length) {
+      console.error(
+        `[showcase] 揭示的张数 ${boardCursor.n} 超过真实公共牌 ${st.board.length}，已自动收敛（dev 自检）`,
+      );
+      setBoardCursor((cur) => clampBoardCursor(cur, handId, st.board.length));
     }
-    if (st.finished && st.finishReason === 'showdown' && revealedBoard !== st.board.length) {
-      // 全下摊牌时 `finished` 与「揭示完成」之间天然存在几帧窗口（引擎一次性补满
-      // 公共牌，演出层要逐张追），所以判据是「结算已经开始了」而不是「牌局结束了」。
-      if (settleHold) {
-        throw new Error('[showcase] 结算已开始但公共牌未全部亮相');
-      }
+    // 2) 结算停顿已开始，但公共牌还没全部亮相。
+    //    全下摊牌时 `finished` 与「揭示完成」之间天然存在几帧窗口（引擎一次性补满
+    //    公共牌，演出层要逐张追），所以判据是「结算已经开始了」而不是「牌局结束了」。
+    if (
+      st.finished &&
+      st.finishReason === 'showdown' &&
+      visibleBoardCount !== st.board.length &&
+      settleHold
+    ) {
+      console.error('[showcase] 结算已开始但公共牌未全部亮相，已自动撤销结算停顿（dev 自检）');
+      setSettleHold(false);
     }
-  }, [revealedBoard, viewKey, st?.board.length, st?.finished, st?.finishReason, st, settleHold]);
+    // viewKey 用来在「原地修改的 state」变化时重新自检。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardCursor, handId, visibleBoardCount, viewKey, st, settleHold]);
 
   const view = useMemo<ShowcaseView>(() => {
     if (!st) {
@@ -460,7 +572,8 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
       };
     }
 
-    const visibleBoardCount = Math.min(revealedBoard, st.board.length);
+    // 可见张数直接读外层派生量（已按 handId 作用域化 + clamp），
+    // 这里不再自己算，避免两处口径不一致。
     const settled = st.finished && settleHold;
     const lastAction = st.actions.length > 0 ? st.actions[st.actions.length - 1] : null;
 
@@ -493,7 +606,7 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
     };
     // viewKey 是必须的：state 是原地修改的对象，引用不变，只依赖 st 会让视图永不重算。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewKey, revealedBoard, settleHold, heroSeat, timing]);
+  }, [viewKey, visibleBoardCount, settleHold, heroSeat, timing]);
 
   const step = useMemo(
     () => planShowcaseStep(snap, heroSeat, view.visibleBoardCount, timing, settleHold),
@@ -576,9 +689,16 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
   // ── 非生产环境不变量自检（第二处：不能无限重排）──
   // 结束停顿已走完却仍排 `settle` 步 → 上层定时器会被无限重排，
   // 表现为「结算面板永不出现」的卡死。这是本任务最容易写错的一处。
-  if (process.env.NODE_ENV !== 'production' && st?.finished && step.kind === 'settle' && settleHold) {
-    throw new Error('[showcase] 结束停顿已完成但仍排 settle 步，会导致无限重排（结算面板不出现）');
-  }
+  //
+  // 同样**只记录、不 throw**：渲染期 throw 会直接卸载整棵树（白屏），
+  // 而这里想要的只是「让开发者在控制台看到」。改到 effect 里做，顺带避免
+  // 渲染期产生副作用。
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return;
+    if (st?.finished && step.kind === 'settle' && settleHold) {
+      console.error('[showcase] 结束停顿已完成但仍排 settle 步，会导致无限重排（结算面板不出现）');
+    }
+  }, [step.kind, st?.finished, settleHold]);
 
   /**
    * 一步最多推进一个单位。
@@ -595,23 +715,22 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
         case 'ai-action': {
           const guard = aiGuardRef.current + 1;
           if (process.env.NODE_ENV !== 'production' && guard > MAX_SHOWCASE_STEPS) {
-            throw new Error(`[showcase] AI 步数超过 ${MAX_SHOWCASE_STEPS}，疑似死循环（本手未结束）`);
+            // 只记录、不 throw：dev 模式下 throw 会让整页白屏（本任务要消灭的正是这类放大）。
+            // MAX_SHOWCASE_STEPS=500，正常一手远达不到，这条只是「死循环可见化」的保险。
+            console.error(`[showcase] AI 步数超过 ${MAX_SHOWCASE_STEPS}，疑似死循环（本手未结束）`);
           }
           aiGuardRef.current = guard;
           runAiStep();
           break;
         }
         case 'board':
-          setRevealedBoard((n) => {
-            // 用 ref 读最新的牌数：回调身份必须稳定（不能被上游定时器依赖），
-            // 因此不能把 st 放进依赖数组。
-            const cap = boardLenRef.current;
-            const next = Math.min(n + 1, cap);
-            if (process.env.NODE_ENV !== 'production' && next < n) {
-              throw new Error(`[showcase] 公共牌游标回退：${n} → ${next}`);
-            }
-            return next;
-          });
+          // 用 ref 读最新手牌 id 与真实牌数：回调身份必须稳定（不能被上游定时器依赖），
+          // 因此不能把 st / handId 放进依赖数组。
+          // `advanceBoardCursor` 恒为 min(当前可见 + 1, 真实张数)，天然单调不减，
+          // 所以旧实现里那条「游标回退」throw 已无存在必要。
+          setBoardCursor((prev) =>
+            advanceBoardCursor(prev, handIdLiveRef.current, boardLenRef.current),
+          );
           break;
         case 'settle':
           setSettleHold(true);

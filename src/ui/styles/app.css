@@ -444,6 +444,12 @@ select:focus {
 /* 绿绒桌面：径向渐变（radial-gradient）+ 双层描边 + 深投影 */
 .felt {
   position: relative;
+  /* 座位密度分档用**容器查询**：判据是牌桌自身内容宽度，而不是视口宽度。
+     牌桌宽度由 .table-wrap 的 max-width 与页面内边距共同决定，同一视口下
+     也可能被挤窄（结算态两栏、侧栏布局）；只有用容器查询，才能保证
+     「座位宽度 ≤ 顶排相邻座位间距」这个几何条件在任何布局下都成立。 */
+  container-type: inline-size;
+  container-name: felt;
   background: var(--felt);
   border: var(--felt-border-width) solid var(--felt-border);
   border-radius: 180px;
@@ -895,8 +901,11 @@ select:focus {
   /* 结算面板出现时牌桌已无信息增量：把高度让给结算内容，
      保证「查看复盘 / 下一手」留在首屏内。可用高度 = 视口 − 顶栏 −
      仪表盘 − 结算面板 − 各处间距（约 288px 固定开销 + 结算面板自身高度）。 */
+  /* 结算态牌桌要给「顶排座位 / 公共牌 / 玩家座位」三条带都留出高度。
+     280px 时 9 人桌玩家座位会压住公共牌（实测 seat0 与 board 重叠 150×21.4px），
+     抬到 340px 后三条带不再相交，同时「下一手」仍在首屏内。 */
   .game-stage.has-result .table-wrap > .felt {
-    min-height: clamp(280px, calc(100vh - 640px), 520px);
+    min-height: clamp(340px, calc(100vh - 560px), 520px);
   }
 
   /* 结算面板横排两栏：左栏「结果 + 动作」，右栏「分配明细」。
@@ -1381,9 +1390,9 @@ tr.grade-major td {
 }
 
 @media (max-width: 560px) {
-  .seat .seat-cards {
-    display: none;
-  }
+  /* 注意：这里**不能**再 `display: none` 底牌。手机竖屏曾经因此把所有人的
+     底牌（包括玩家自己）都变成 0×0，玩家完全看不到自己拿了什么牌。
+     底牌缩到小尺寸由文件末尾的「座位密度」容器查询负责。 */
   .felt {
     min-height: 330px;
     border-radius: 120px;
@@ -1425,4 +1434,126 @@ tr.grade-major td {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* ============================================================
+   座位密度：随牌桌内容宽度自动收敛（容器查询 + cqw）
+   ------------------------------------------------------------
+   判据是**牌桌自身内容宽度**（cqw = 容器内容宽的 1%），不是视口宽度：
+   牌桌宽度由 .table-wrap 的 max-width 与页面内边距共同决定，同一视口下
+   也可能被挤窄（结算态两栏、侧栏布局）。
+
+   两条硬约束：
+     1) 座位宽度 ≤ 顶排相邻座位间距，否则两两相交；
+        顶排间距占内容宽的比例：9 人桌 ≈14.3cqw、6 人桌 ≈25cqw、
+        2/3 人桌 ≥40cqw。因此座位宽取 13 / 24 / 40 cqw（上限 150px）。
+     2) 两张底牌的宽度和 ≤ 座位内容宽，否则底牌会横向溢出；
+        底牌宽度用 clamp(14px, 3.4cqw, 38px)，与座位宽度同源缩放。
+   ============================================================ */
+.felt .seat {
+  min-width: 0;
+  width: min(150px, 16cqw); /* 4/5/7/8 人桌兜底（设置页只开放 2/6/9） */
+  padding: clamp(3px, 0.8cqw, 9px) clamp(4px, 1cqw, 11px);
+  gap: clamp(2px, 0.55cqw, 6px);
+}
+.felt[data-seat-count='9'] .seat {
+  width: min(150px, 13cqw);
+}
+.felt[data-seat-count='6'] .seat {
+  width: min(150px, 24cqw);
+}
+.felt[data-seat-count='3'] .seat,
+.felt[data-seat-count='2'] .seat {
+  width: min(150px, 40cqw);
+}
+
+/* 座位头部（名字 / 筹码）：窄座位里自动换行，不把座位撑宽 */
+.seat .seat-head {
+  flex-wrap: wrap;
+}
+.seat .name {
+  min-width: 0;
+  font-size: clamp(9px, 1.1cqw, 12px);
+}
+.seat .stack {
+  font-size: clamp(9.5px, 1.2cqw, 13.5px);
+}
+
+/* 底牌：尺寸与座位同源缩放，手机上保持可见（曾经被整块 display:none） */
+.seat .seat-cards {
+  gap: clamp(2px, 0.4cqw, 4px);
+}
+.seat .card.small {
+  width: clamp(14px, 3.4cqw, 38px);
+  height: clamp(20px, 4.8cqw, 54px);
+  font-size: clamp(6px, 1.3cqw, 15px);
+  padding: clamp(0px, 0.4cqw, 4px) clamp(1px, 0.5cqw, 5px);
+}
+.seat .card.small .rank {
+  font-size: clamp(6.5px, 1.35cqw, 15px);
+}
+.seat .card.small .suit {
+  font-size: clamp(5.5px, 1.2cqw, 13px);
+}
+.seat .badge {
+  font-size: clamp(6.5px, 0.95cqw, 10.5px);
+  padding: clamp(0px, 0.1cqw, 1px) clamp(2px, 0.5cqw, 6px);
+}
+
+/* ---------- 密度两档 ----------
+   标准档：牌桌内容宽 > 560px（桌面、平板横屏、结算态宽牌桌）。
+   紧凑档：牌桌内容宽 ≤ 560px（手机竖屏、短屏结算态的两栏窄牌桌）。
+   紧凑档在 cqw 连续收敛之外再做三件事：收紧内边距/间距、隐去 AI 档位徽章、
+   隐去本街投入——把纵向空间让给「名字 + 筹码 + 动作气泡 + 底牌」，
+   而底牌本身仍然显示（此前手机端整块 display:none 是缺陷根源）。 */
+@container felt (max-width: 560px) {
+  .felt .seat {
+    padding: clamp(3px, 0.8cqw, 7px) clamp(4px, 1cqw, 9px);
+    gap: clamp(2px, 0.5cqw, 4px);
+  }
+  .felt .seat .badge.tier {
+    display: none;
+  }
+}
+
+/* 极窄牌桌（手机竖屏，内容宽 ≤ 460px）连本街投入也隐去，
+   避免换行把座位撑高、与顶排座位相撞。 */
+@container felt (max-width: 460px) {
+  .felt .seat .committed {
+    display: none;
+  }
+}
+
+/* ---------- 结算态：牌桌让高给结算面板，座位同步收紧 ----------
+   结算态牌桌只有 340px 高，标准尺寸的座位会让「顶排 / 公共牌 / 玩家座位」
+   三条带相交（实测 1440×900 下玩家座位压住公共牌 150×21.4px）。 */
+.game-stage.has-result .felt .seat {
+  padding: 4px 6px;
+  gap: 3px;
+}
+.game-stage.has-result .felt .seat .committed {
+  display: none;
+}
+/* 只在牌桌够宽时把底牌定到 24×34（窄牌桌继续用上面的 cqw 收敛值，
+   否则 24px 宽的牌会撑破 42px 宽的座位）。 */
+@container felt (min-width: 460px) {
+  .game-stage.has-result .felt .seat .card.small {
+    width: 24px;
+    height: 34px;
+    font-size: 9px;
+    padding: 1px 2px;
+  }
+  .game-stage.has-result .felt .seat .card.small .rank {
+    font-size: 9px;
+  }
+  .game-stage.has-result .felt .seat .card.small .suit {
+    font-size: 8px;
+  }
+}
+
+/* 结算面板自带「下一手」，操作面板在结算态再放一个就是同屏两个入口。
+   App.tsx 在结算面板渲染时给 .game-stage 加 .has-result（App.tsx 不可改），
+   这里据此隐藏操作面板的重复入口；键盘 N 由 App 的全局快捷键处理，不受影响。 */
+.game-stage.has-result > .table-wrap > .action-panel {
+  display: none;
 }
