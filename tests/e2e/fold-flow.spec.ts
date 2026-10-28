@@ -551,20 +551,42 @@ test.describe('task-2 弃牌后 AI 继续打完', () => {
    * 本用例即该修复的回归护栏：结算面板出现时公共牌必须已经全部揭示。
    */
   test('全下摊牌时结算面板不应先于公共牌揭示出现', async ({ page }) => {
+    // 需要换手重试（原因见下），故放宽到 10 分钟（默认 300s）。
+    test.setTimeout(600_000);
     const { errors } = attachErrors(page);
     await enterTableWithStack(page, 20);
-    const t0 = await waitForHeroTurn(page);
-    expect(t0.boardRevealed, '本用例要求玩家在翻前行动').toBe(0);
-    const foldAt = await clickFold(page);
-    const samples = await sampleUntilOver(page);
-    const d = derive(samples, foldAt);
-    const st = await readSettlement(page);
-    console.log(
-      `全下摊牌：弃牌→结算 ${(d.elapsedMs / 1000).toFixed(2)}s，AI 动作 ${d.aiActionCount} 次，` +
-        `结算时 boardRevealed=${d.boardAtOver}，结束方式=${st.stats['结束方式'] ?? '（无）'}`,
-    );
-    // 期望：结算面板出现时公共牌已经全部揭示（当前实现会失败，故 fixme）
-    expect(d.boardAtOver, '结算面板出现时公共牌应已全部揭示').toBe(5);
+
+    // 这个不变量只在**摊牌**结局下成立：若玩家弃牌后其余人也一路弃牌到只剩一家，
+    // 本手按规则立即结束、公共牌一张都不发，此时「结算面板出现时 boardRevealed=0」
+    // 是正确行为而不是缺陷。第二批把面对下注的弃牌率从 0% 提到 23.6% 之后，
+    // 这种「弃牌结束」的手明显变多，因此必须换手重试（最多 4 手），
+    // 不能把合法结局误判成回归。
+    let done = false;
+    for (let attempt = 0; attempt < 4 && !done; attempt++) {
+      if (attempt > 0) await clickNextHand(page);
+      let t0: Sample;
+      try {
+        t0 = await waitForHeroTurn(page);
+      } catch {
+        // 玩家还没行动本手就结束了（例如在大盲位被一路弃牌到结束）——合法，换一手。
+        console.log(`第 ${attempt + 1} 手：玩家还没行动本手就结束了，换下一手`);
+        continue;
+      }
+      expect(t0.boardRevealed, '本用例要求玩家在翻前行动').toBe(0);
+      const foldAt = await clickFold(page);
+      const samples = await sampleUntilOver(page);
+      const d = derive(samples, foldAt);
+      const st = await readSettlement(page);
+      console.log(
+        `第 ${attempt + 1} 手 全下摊牌：弃牌→结算 ${(d.elapsedMs / 1000).toFixed(2)}s，AI 动作 ${d.aiActionCount} 次，` +
+          `结算时 boardRevealed=${d.boardAtOver}，结束方式=${st.stats['结束方式'] ?? '（无）'}`,
+      );
+      // 非摊牌结局（弃牌结束）无法验证该不变量，换一手重试。
+      if (st.stats['结束方式'] !== '摊牌（Showdown）') continue;
+      expect(d.boardAtOver, '结算面板出现时公共牌应已全部揭示').toBe(5);
+      done = true;
+    }
+    expect(done, '4 手内没遇到全下摊牌，无法验证「结算不早于揭示」').toBe(true);
     expect(errors).toEqual([]);
   });
 });

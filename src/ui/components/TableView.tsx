@@ -260,6 +260,12 @@ export function TableView({
           >
             {pot}
           </div>
+          {/* 底池变化此前只有视觉脉冲，读屏用户完全感知不到（审计无障碍项）。
+              补一个常驻的 polite 播报区：它始终在 DOM 里（内容变化才会播报，
+              若随内容一起挂载则首帧不会触发播报）。sr-only 绝对定位，不参与布局。 */}
+          <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            底池 {pot}
+          </span>
         </div>
         <div className="board" data-testid="board" data-revealed={shownBoard.length}>
           <CardRow

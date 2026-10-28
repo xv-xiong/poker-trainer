@@ -9,12 +9,21 @@
  *   - `waiting`：AI 思考 / 发牌中，显示等待态（而不是「轮到你」的按钮）。
  *   - 禁用只作用于按钮与快捷键；`onAct` 的结果仍由 controller 判定，
  *     因此即使禁用被绕过也不会改变对局结果。
+ *
+ * 全下二次确认（审计 P1-6）：
+ *   全下是唯一「一次误点就不可挽回」的动作（弃牌同样不可撤销，但它是高频动作，
+ *   每次加确认会显著拖慢练习节奏，因此不加）。实现方式是**同一个按钮二次点击**，
+ *   而不是弹窗：弹窗会打断键盘流，也会在移动端遮住牌桌。3 秒内不确认则自动复位，
+ *   避免「以为没点上、其实已经进入确认态」的歧义。
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { ACTION_LABELS, type ActionType } from '../../core/types.js';
 import type { LegalActions } from '../../core/betting.js';
 import '../styles/actionbar.css';
+
+/** 全下确认态的有效时长（毫秒）。超时自动复位，防止误判「卡在确认态」。 */
+const ALLIN_CONFIRM_MS = 3000;
 
 export function ActionBar({
   legal,
@@ -46,7 +55,7 @@ export function ActionBar({
   onNextHand: () => void;
   /** 演出后**真正**可行动；不传则退化为 controller 的 `heroTurn`。 */
   heroTurnActive?: boolean;
-  /** 是否处于「演出中」（AI 思考 / 发牌中 / 自己的气泡停留中）。 */
+  /** 是否处于「演出中」（AI 思考中 / 发牌中 / 自己的气泡停留中）。 */
   waiting?: boolean;
   waitingLabel?: string;
   /** 本手是否已结束但仍在结算停顿中（此时不显示「下一手」，避免连点）。 */
@@ -56,10 +65,22 @@ export function ActionBar({
   const minRaise = legal?.minRaiseTo ?? 0;
   const maxRaise = legal?.maxRaiseTo ?? 0;
   const [raiseTo, setRaiseTo] = useState(minRaise);
+  /** 全下是否已进入「待确认」状态（再点一次才真正执行）。 */
+  const [allinArmed, setAllinArmed] = useState(false);
 
   useEffect(() => {
     setRaiseTo(minRaise);
-  }, [minRaise, maxRaise]);
+    // 行动权或可加注区间变化（含换街、换手、轮到别人）时，确认态一律复位：
+    // 否则上一手残留的「确认中」会让下一次全下变成单击即执行。
+    setAllinArmed(false);
+  }, [minRaise, maxRaise, canAct]);
+
+  // 确认态超时复位
+  useEffect(() => {
+    if (!allinArmed) return;
+    const t = setTimeout(() => setAllinArmed(false), ALLIN_CONFIRM_MS);
+    return () => clearTimeout(t);
+  }, [allinArmed]);
 
   const quickSizes = useMemo(() => {
     if (!legal?.canRaise) return [];
@@ -154,6 +175,20 @@ export function ActionBar({
     ? `${ACTION_LABELS.check.zh}（Check）`
     : `${ACTION_LABELS.call.zh}（Call） ${legal?.callAmount ?? 0}`;
 
+  /**
+   * 全下点击：第一次只进入确认态，第二次才真正执行。
+   * 用按钮文案本身表达状态（不额外插 DOM），避免确认态把仪表盘撑高、
+   * 进而让牌桌高度变化（那会引起整页轻微跳动）。
+   */
+  const handleAllIn = () => {
+    if (!allinArmed) {
+      setAllinArmed(true);
+      return;
+    }
+    setAllinArmed(false);
+    onAct('allin');
+  };
+
   return (
     <div className="action-panel sc-my-turn hint-host" data-testid="action-my-turn">
       <h3>你的行动</h3>
@@ -184,6 +219,9 @@ export function ActionBar({
             step={bigBlind}
             value={raiseTo}
             aria-label="加注额度"
+            /* 读屏只念数字时听不出这是「加注到」还是「筹码数」，
+               补上语义 + BB 对照（WCAG 2.2 · 1.3.1 / 4.1.2）。 */
+            aria-valuetext={`加注到 ${raiseTo}（约 ${(raiseTo / Math.max(1, bigBlind)).toFixed(1)} BB）`}
             onChange={(e) => setRaiseTo(Number(e.target.value))}
           />
           <div className="quick-sizes">
@@ -197,10 +235,20 @@ export function ActionBar({
             <button className="primary" onClick={() => onAct('raise', raiseTo)}>
               加注（Raise）
             </button>
-            <button onClick={() => onAct('allin')} disabled={!legal?.canAllIn}>
-              全下（All-in）
+            <button
+              className={allinArmed ? 'danger' : undefined}
+              onClick={handleAllIn}
+              disabled={!legal?.canAllIn}
+              data-testid="btn-allin"
+              title={allinArmed ? '再点一次确认全下' : '全下需要二次确认'}
+            >
+              {allinArmed ? '确认全下？' : '全下（All-in）'}
             </button>
           </div>
+          {/* 确认态播报：放在 sr-only 里，不改变布局高度 */}
+          <span className="sr-only" role="status" aria-live="polite">
+            {allinArmed ? '已进入全下确认，请再点一次确认全下；3 秒后自动取消。' : ''}
+          </span>
         </div>
       )}
 

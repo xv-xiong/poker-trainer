@@ -231,8 +231,14 @@ export function App() {
           {TABS.map((t) => (
             <button
               key={t.id}
+              id={`tab-${t.id}`}
               role="tab"
               aria-selected={tab === t.id}
+              // 只给「当前选中」的 tab 挂 aria-controls：
+              // 面板是按需渲染的（未选中的 tab 在 DOM 里没有对应元素），
+              // 而 ARIA 规定 aria-controls 必须指向一个真实存在的元素，
+              // 给所有 tab 都挂会产出 4 个悬空 IDREF（读屏软件可能报「找不到受控元素」）。
+              aria-controls={tab === t.id ? `panel-${t.id}` : undefined}
               className={`tab ${tab === t.id ? 'active' : ''}`}
               onClick={() => setTab(t.id)}
             >
@@ -272,7 +278,12 @@ export function App() {
         /* game-stage：把「牌桌 + 操作仪表盘 + 结算面板」作为一个整体，
            在剩余高度里垂直居中（布局见 app.css 的 .game-stage）。
            空白区域过大时靠它把内容拉到视口中部，而不是全部堆在顶部。 */
-        <div className={`game-stage${showResult ? ' has-result' : ''}`}>
+        <div
+          className={`game-stage${showResult ? ' has-result' : ''}`}
+          role="tabpanel"
+          id="panel-table"
+          aria-labelledby="tab-table"
+        >
           {!snap.state ? (
             <div className="panel">
               <div className="empty">正在发牌…</div>
@@ -383,17 +394,34 @@ export function App() {
         </div>
       )}
 
-      {tab === 'review' && <ReviewPanel record={snap.lastRecord} review={snap.lastReview} />}
-      {tab === 'stats' && <StatsPanel stats={snap.stats} bankroll={snap.bankroll} />}
+      {tab === 'review' && (
+        <div role="tabpanel" id="panel-review" aria-labelledby="tab-review">
+          <ReviewPanel record={snap.lastRecord} review={snap.lastReview} />
+        </div>
+      )}
+      {tab === 'stats' && (
+        <div role="tabpanel" id="panel-stats" aria-labelledby="tab-stats">
+          <StatsPanel
+            stats={snap.stats}
+            bankroll={snap.bankroll}
+            startingStack={snap.settings.startingStack}
+          />
+        </div>
+      )}
       {tab === 'history' && (
-        <HistoryPanel history={snap.history} onClear={() => controller.clearHistory()} />
+        <div role="tabpanel" id="panel-history" aria-labelledby="tab-history">
+          <HistoryPanel history={snap.history} onClear={() => controller.clearHistory()} />
+        </div>
       )}
       {tab === 'settings' && (
-        <SettingsPanel
-          settings={snap.settings}
-          onChange={(patch) => controller.updateSettings(patch)}
-          onResetBankroll={() => controller.resetBankroll()}
-        />
+        <div role="tabpanel" id="panel-settings" aria-labelledby="tab-settings">
+          <SettingsPanel
+            settings={snap.settings}
+            onChange={(patch) => controller.updateSettings(patch)}
+            onResetBankroll={() => controller.resetBankroll()}
+            handInProgress={Boolean(snap.state && !snap.state.finished)}
+          />
+        </div>
       )}
     </div>
   );

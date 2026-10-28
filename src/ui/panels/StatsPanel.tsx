@@ -3,13 +3,23 @@
  */
 
 import type { Stats } from '../../core/types.js';
+import { netClass } from '../format.js';
 
 function pct(n: number, d: number): string {
   if (d === 0) return '—';
   return `${((n / d) * 100).toFixed(1)}%`;
 }
 
-export function StatsPanel({ stats, bankroll }: { stats: Stats; bankroll: number }) {
+export function StatsPanel({
+  stats,
+  bankroll,
+  startingStack,
+}: {
+  stats: Stats;
+  bankroll: number;
+  /** 当前配置的起始筹码。盈亏配色必须与它比较，不能硬编码 1000。 */
+  startingStack: number;
+}) {
   const vpip = stats.handsPlayed > 0 ? (stats.vpipHands / stats.handsPlayed) * 100 : 0;
   const pfr = stats.handsPlayed > 0 ? (stats.pfrHands / stats.handsPlayed) * 100 : 0;
   const wtsd = stats.handsPlayed > 0 ? (stats.showdownsSeen / stats.handsPlayed) * 100 : 0;
@@ -23,7 +33,7 @@ export function StatsPanel({ stats, bankroll }: { stats: Stats; bankroll: number
       <div className="stats-grid">
         <div className="stat">
           <div className="k">当前资金</div>
-          <div className={`v ${bankroll >= 1000 ? 'pos' : 'neg'}`}>{bankroll}</div>
+          <div className={`v ${netClass(bankroll, startingStack)}`}>{bankroll}</div>
         </div>
         <div className="stat">
           <div className="k">累计净盈亏</div>

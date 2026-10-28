@@ -1,25 +1,47 @@
 /**
  * 设置面板 + 规则说明（含已定案规则，便于查阅）。
+ *
+ * 「下一手生效」标记的由来（审计 P1-5）：
+ * 桌人数 / 盲注 / 起始筹码 / AI 难度 都是**开新一手时**才读取的配置，
+ * 当前手进行中改动不会立即反映到牌桌上。此前界面没有任何提示，用户会以为
+ * 「改了没反应」是 bug。这里用标签 + 顶部说明把生效时机讲清楚，而不是去
+ * 做「热切换」——热切换会改变进行中手牌的规则参数，破坏金额与结算的可解释性。
  */
 
 import { AI_TIER_LABELS, type AITier, type Settings } from '../../core/types.js';
+
+/** 生效时机标签：这些项只在开新一手时读取。 */
+function NextHandTag() {
+  return <span className="tag next-hand">下一手生效</span>;
+}
 
 export function SettingsPanel({
   settings,
   onChange,
   onResetBankroll,
+  handInProgress,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   onResetBankroll: () => void;
+  /** 当前是否有未结束的手牌。仅用于把「改动下一手生效」说得更具体。 */
+  handInProgress: boolean;
 }) {
   return (
     <div className="panel">
       <h2>设置（Settings）</h2>
 
+      <p className="panel-note">
+        带「下一手生效」标记的项只影响之后新开的手牌
+        {handInProgress ? '——本手正在进行中，改动不会改变当前这一手' : ''}。
+        四色牌与快捷键提示立即生效。
+      </p>
+
       <div className="settings-row">
         <div className="label">
-          <span>桌人数</span>
+          <span>
+            桌人数 <NextHandTag />
+          </span>
           <span className="hint">2 / 6 / 9 人桌，默认 6 人</span>
         </div>
         <select
@@ -34,7 +56,9 @@ export function SettingsPanel({
 
       <div className="settings-row">
         <div className="label">
-          <span>AI 难度</span>
+          <span>
+            AI 难度 <NextHandTag />
+          </span>
           <span className="hint">三档由同一策略 + 不同参数实现</span>
         </div>
         <select
@@ -49,7 +73,9 @@ export function SettingsPanel({
 
       <div className="settings-row">
         <div className="label">
-          <span>起始筹码</span>
+          <span>
+            起始筹码 <NextHandTag />
+          </span>
           <span className="hint">以 BB 计，1000 = 100BB（盲注 5/10）</span>
         </div>
         <input
@@ -64,7 +90,9 @@ export function SettingsPanel({
 
       <div className="settings-row">
         <div className="label">
-          <span>盲注</span>
+          <span>
+            盲注 <NextHandTag />
+          </span>
           <span className="hint">小盲 / 大盲，盲注不递增</span>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -114,7 +142,9 @@ export function SettingsPanel({
 
       <div className="settings-row">
         <div className="label">
-          <span>翻牌单挑精确枚举</span>
+          <span>
+            翻牌单挑精确枚举 <NextHandTag />
+          </span>
           <span className="hint">
             精确但慢：实测约 1.8 秒（1,070,190 次摊牌）。默认关闭，开启后仅在单挑翻牌时生效
           </span>
@@ -156,11 +186,16 @@ export function SettingsPanel({
         <li>单挑翻牌：默认蒙特卡洛；显式开启后走精确枚举（1,070,190 次摊牌，约 1.8 秒）。</li>
         <li>多人桌任意街：蒙特卡洛采样（默认 20,000 次迭代）。</li>
         <li>
+          <strong>AI 决策的口径与上表不同</strong>：翻牌前查表，翻牌后统一走蒙特卡洛（3,000 次），
+          不走精确枚举——AI 只需要胜率与底池赔率比较，±2% 的采样误差不影响判断，
+          而精确枚举在单挑转牌要 45,540 次摊牌，会同步阻塞主线程。
+        </li>
+        <li>
           用户主动查看的胜率提示在 Web Worker（浏览器后台线程）内计算，不阻塞界面。
         </li>
         <li>
           注意口径：AI 决策与赛后复盘的胜率计算是<strong>主线程同步</strong>执行的（实测 hard
-          档单次决策 p95 约 33ms、复盘每决策点约 5ms），当前未迁入 Worker；仅当提高迭代次数
+          档单次决策 p95 约 6ms、复盘每决策点约 5ms），当前未迁入 Worker；仅当提高迭代次数
           导致明显卡顿时才需要迁移。
         </li>
       </ul>

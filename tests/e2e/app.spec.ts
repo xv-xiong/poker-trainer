@@ -34,7 +34,7 @@ function attachErrorCollector(page: Page): { errors: string[] } {
  */
 async function playHandToCompletion(
   page: Page,
-  timeoutMs = 120_000,
+  timeoutMs = 180_000,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -50,17 +50,32 @@ async function playHandToCompletion(
       .catch(() => false);
     if (overVisible) return;
 
-    // 轮到自己时跟注/过牌（注意：可能同时存在多个按钮，用第一个可见的）
-    const checkBtn = page.getByRole('button', { name: /跟注|过牌/ }).first();
-    const canAct = (await checkBtn.isVisible().catch(() => false)) &&
-      (await checkBtn.isEnabled().catch(() => false));
-    if (canAct) {
-      await checkBtn.click({ timeout: 5000 }).catch(() => {});
+    // 轮到自己时跟注/过牌。
+    // 必须扫描**所有**候选按钮而不是取 `.first()`：仪表盘在等待态也会渲染同名
+    // 但禁用的按钮，DOM 顺序上它可能排在可点按钮之前，取 first 会一直读到
+    // 「不可用」从而空转到超时（曾把一手牌拖到 300s 测试超时）。
+    const candidates = page.getByRole('button', { name: /跟注|过牌/ });
+    const total = await candidates.count();
+    let clicked = false;
+    for (let i = 0; i < total; i++) {
+      const b = candidates.nth(i);
+      if (!(await b.isVisible().catch(() => false))) continue;
+      if (!(await b.isEnabled().catch(() => false))) continue;
+      await b.click({ timeout: 5000 }).catch(() => {});
+      clicked = true;
+      break;
+    }
+    if (clicked) {
       await page.waitForTimeout(180);
       continue;
     }
     await page.waitForTimeout(220);
   }
+  // 到点仍未结束必须显式报错。
+  // 旧实现这里直接 `return`，于是「本手没打完」被伪装成下游 `本手结果` 断言
+  // 超时——排查时只能看到一句无关的 toBeVisible 失败，无法区分「手牌卡住」
+  // 与「结算面板没渲染」。
+  throw new Error(`playHandToCompletion 超时（${timeoutMs}ms）：本手仍未结束`);
 }
 
 /**

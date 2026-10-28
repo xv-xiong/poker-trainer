@@ -1207,6 +1207,24 @@ tr.grade-major td {
   color: var(--danger);
 }
 
+/* 「下一手生效」标签：比普通 tag 更弱（它是说明性的，不该抢视觉重心） */
+.tag.next-hand {
+  font-size: 10px;
+  padding: 0 6px;
+  border-color: var(--line-soft);
+  color: var(--fg-2);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/* 面板顶部的说明文字（设置页用来说明生效时机） */
+.panel-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--fg-2);
+}
+
 .empty {
   color: var(--fg-2);
   font-size: 13.5px;
