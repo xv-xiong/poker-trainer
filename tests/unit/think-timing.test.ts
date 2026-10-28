@@ -97,8 +97,10 @@ describe('thinkTiming：hashUnit', () => {
     for (const [i, n] of buckets.entries()) {
       expect(n / N, `第 ${i} 桶占比过低：${n}/${N}`).toBeGreaterThan(0.02);
     }
-    // 真的在波动：不是所有步都抽到同一个值
-    expect(max - min).toBeGreaterThan(1000);
+    // 真的在波动：样本要基本铺满整个区间（不写死毫秒数，跟着区间走，
+    // 否则以后调整 AI_THINK_RANGE 会变成假红）
+    const rangeSpan = AI_THINK_RANGE.maxMs - AI_THINK_RANGE.minMs;
+    expect(max - min).toBeGreaterThan(rangeSpan * 0.9);
   });
 });
 

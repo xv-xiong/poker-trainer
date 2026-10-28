@@ -18,7 +18,7 @@
 /* 演出节奏令牌：与 useTableShowcase.ts 的 SHOWCASE_TIMING 对齐。
    `--sc-think-ms` 当前没有消费方（无任何规则引用它），保留只为与 JS 侧口径一致；
    它也**不代表 AI 的实际等待**：AI 每步等待在 src/ui/thinkTiming.ts 的
-   AI_THINK_RANGE（1100–2400ms）内哈希抽样，由 JS 的 setTimeout 驱动。 */
+   AI_THINK_RANGE（1100–1800ms）内哈希抽样，由 JS 的 setTimeout 驱动。 */
 :root {
   --sc-think-ms: 1100ms;
   --sc-reveal-ms: 780ms;

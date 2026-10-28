@@ -7,6 +7,7 @@
 
 import { legalActions, amountToCall, liveCount } from '../core/betting.js';
 import { computeEquity, AI_ITERATIONS, potOdds } from '../core/equity/index.js';
+import { monteCarloEquity } from '../core/equity/montecarlo.js';
 import { totalPot } from '../core/hand.js';
 import { createRng, type Rng } from '../core/rng.js';
 import { rank7 } from '../core/rank7.js';
@@ -86,17 +87,30 @@ export function decideAI(
   // 胜率：困难档用蒙特卡洛；其余档用强度近似（不做采样，保证速度）
   let equity = strength;
   if (params.useEquity && state.board.length > 0) {
-    const r = computeEquity({
-      hero: seat.holeCards,
-      board: state.board,
-      opponents,
+    // 为什么直接调 monteCarloEquity 而不是 computeEquity：
+    // computeEquity 在「单挑 + 转牌/河牌」时会走精确枚举（转牌 45,540 次摊牌），
+    // 这是 AI 决策里唯一会同步阻塞主线程数百毫秒的路径（冷启动实测 52ms，
+    // 慢机可达数百毫秒），而它比 3000 次蒙特卡洛贵 6 倍。
+    // AI 只是拿胜率去和底池赔率阈值比较，±2% 的采样误差不改变判断，
+    // 因此 AI 一律用蒙特卡洛；提示与复盘仍走 computeEquity（那里需要精确值）。
+    const r = monteCarloEquity(seat.holeCards, state.board, {
       iterations: params.equityIterations || AI_ITERATIONS,
+      opponents,
       rng,
     });
     equity = r.equity;
   } else if (params.useEquity && state.board.length === 0) {
-    // 翻牌前困难档也查表（零延迟）
-    const r = computeEquity({ hero: seat.holeCards, board: [], opponents, rng });
+    // 翻牌前困难档也查表（零延迟）。
+    // 但查表只覆盖对手数 {1,2,5,8}：6 人桌翻前常出现 3–4 个对手，此时会退化为
+    // 蒙特卡洛，若不传 iterations 就会用 computeEquity 的默认值 20,000
+    // （实测 70–95ms 的主线程停顿），而 AI 只需要 3000 次（约 10ms）。
+    const r = computeEquity({
+      hero: seat.holeCards,
+      board: [],
+      opponents,
+      iterations: params.equityIterations || AI_ITERATIONS,
+      rng,
+    });
     equity = r.equity;
   }
 

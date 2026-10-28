@@ -26,10 +26,15 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { AI_THINK_RANGE } from '../../src/ui/thinkTiming.js';
 
-/** 与 src/ui/thinkTiming.ts 的 AI_THINK_RANGE 对齐。 */
-const THINK_MIN_MS = 1100;
-const THINK_MAX_MS = 2400;
+/**
+ * 直接引用产品常量，而不是在这里抄一份数字。
+ * 抄一份的话，以后调整区间（例如上限从 2400 收到 1800）测试不会跟着变，
+ * 断言就变成「永远成立的空断言」或「莫名其妙的假红」。
+ */
+const THINK_MIN_MS = AI_THINK_RANGE.minMs;
+const THINK_MAX_MS = AI_THINK_RANGE.maxMs;
 
 /**
  * 产品硬要求：不允许 1 秒内出决策。
@@ -39,7 +44,7 @@ const THINK_MAX_MS = 2400;
  */
 const LOWER_BOUND_MS = 1000;
 
-/** 上限容差：真实等待 ≤ 2400ms，再给渲染提交与定时器抖动留 500ms。 */
+/** 上限容差：真实等待 ≤ THINK_MAX_MS，再给渲染提交与定时器抖动留 500ms。 */
 const UPPER_BOUND_MS = THINK_MAX_MS + 500;
 
 interface ThinkSample {
