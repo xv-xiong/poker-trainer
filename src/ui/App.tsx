@@ -236,6 +236,21 @@ export function App() {
     });
   }, [snap.sessionEnd, snap.stats, snap.history, snap.settings.bigBlind]);
 
+  /**
+   * 「结局画面」与「补码弹窗」都等这一手的演出走完才登场。
+   *
+   * 为什么必须等：`finalizeHand()` 一跑完 `pendingBusts` / `sessionEnd` 就有值了，
+   * 但此时演出层还在揭示公共牌、飞筹码、走结算停顿。若直接渲染，弹窗会盖在
+   * 筹码飞行动画上，用户根本看不到自己是怎么输光的——本手的结果一次都没露面。
+   * 判据 `showResult`（牌打完且演出停顿完成）正好是「这一手演完了」的时点；
+   * `!snap.state` / `!snap.state.finished` 覆盖「页面刚加载、账本已输光」的情况。
+   */
+  const showSessionEnd = Boolean(
+    sessionSummary && snap.sessionEnd && (showResult || !snap.state),
+  );
+  const showRebuy = Boolean(pendingBust && (showResult || !snap.state?.finished));
+
+
   /** 单局练习模式下的单手点评与累计进度。 */
   const feedback = useMemo(
     () => handFeedback(snap.lastReview, Math.max(1, snap.settings.bigBlind)),
@@ -332,14 +347,14 @@ export function App() {
            在剩余高度里垂直居中（布局见 app.css 的 .game-stage）。
            空白区域过大时靠它把内容拉到视口中部，而不是全部堆在顶部。 */
         <div
-          className={`game-stage${showResult && !sessionSummary ? ' has-result' : ''}`}
+          className={`game-stage${showResult && !showSessionEnd ? ' has-result' : ''}`}
           role="tabpanel"
           id="panel-table"
           aria-labelledby="tab-table"
         >
           {/* 本局已结束（继承模式下玩家出局 / 赢下整桌）：整块替换牌桌，
               因为此时既没有下一手可打，牌桌也不再是用户关心的焦点。 */}
-          {sessionSummary && snap.sessionEnd && (
+          {showSessionEnd && snap.sessionEnd && sessionSummary && (
             <SessionEndPanel
               kind={snap.sessionEnd.kind}
               summary={sessionSummary}
@@ -351,13 +366,13 @@ export function App() {
             />
           )}
 
-          {!sessionSummary && !snap.state && (
+          {!showSessionEnd && !snap.state && (
             <div className="panel">
               <div className="empty">正在发牌…</div>
             </div>
           )}
 
-          {!sessionSummary && snap.state && (
+          {!showSessionEnd && snap.state && (
             <div className="table-wrap">
               <TableView
                 state={snap.state}
@@ -405,7 +420,7 @@ export function App() {
             </div>
           )}
 
-          {showResult && !sessionSummary && snap.state && (
+          {showResult && !showSessionEnd && snap.state && (
             <div className="panel result-panel">
               <h2>本手结果</h2>
               <div className="result-grid">
@@ -537,7 +552,7 @@ export function App() {
       )}
 
       {/* 补码决策是模态的：它挡在牌桌之上，因为「是否继续」决定了这一局怎么走 */}
-      {pendingBust && (
+      {showRebuy && pendingBust && (
         <RebuyDialog
           bust={pendingBust}
           startingStack={snap.settings.startingStack}
