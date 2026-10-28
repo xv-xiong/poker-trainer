@@ -326,7 +326,8 @@ test.describe('G8 端到端全链路', () => {
     await page.getByRole('tab', { name: '设置' }).click();
     await expect(page.getByRole('heading', { name: '设置（Settings）' })).toBeVisible();
 
-    const fourColor = page.getByRole('checkbox').first();
+    // 按无障碍名称定位：设置面板里不止一个复选框，用 .first() 会随面板顺序漂移
+    const fourColor = page.getByRole('checkbox', { name: '四色牌' });
     await fourColor.uncheck();
     await expect(page.locator('.app')).toHaveClass(/two-color/);
     await fourColor.check();
@@ -552,7 +553,7 @@ test.describe('开始界面与风格令牌', () => {
 
     // 切到传统两色
     await page.getByRole('tab', { name: '设置' }).click();
-    const fourColorSwitch = page.getByRole('checkbox').first();
+    const fourColorSwitch = page.getByRole('checkbox', { name: '四色牌' });
     await fourColorSwitch.uncheck();
     await expect(page.locator('.app')).toHaveClass(/two-color/);
     await page.getByRole('tab', { name: '牌桌' }).click();

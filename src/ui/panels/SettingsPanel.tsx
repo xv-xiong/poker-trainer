@@ -9,6 +9,7 @@
  */
 
 import { AI_TIER_LABELS, type AITier, type Settings } from '../../core/types.js';
+import type { RosterSeat } from '../../store/schema.js';
 
 /** 生效时机标签：这些项只在开新一手时读取。 */
 function NextHandTag() {
@@ -20,12 +21,20 @@ export function SettingsPanel({
   onChange,
   onResetBankroll,
   handInProgress,
+  carryOverStacks,
+  onCarryOverChange,
+  roster,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   onResetBankroll: () => void;
   /** 当前是否有未结束的手牌。仅用于把「改动下一手生效」说得更具体。 */
   handInProgress: boolean;
+  /** 是否让筹码在牌局之间延续（阶段 1-1）。 */
+  carryOverStacks: boolean;
+  onCarryOverChange: (on: boolean) => void;
+  /** 继承模式下的 AI 账本（空数组表示尚未开局）。 */
+  roster: RosterSeat[];
 }) {
   return (
     <div className="panel">
@@ -36,6 +45,43 @@ export function SettingsPanel({
         {handInProgress ? '——本手正在进行中，改动不会改变当前这一手' : ''}。
         四色牌与快捷键提示立即生效。
       </p>
+
+      {/* 继承模式开关放在最上面：它决定下面「起始筹码」的含义——
+          关着时每手都从起始筹码重新开始（单局练习）；开着时起始筹码只在
+          开局那一刻生效，之后筹码在玩家与各 AI 之间真实流转。 */}
+      <div className="settings-row carry-over-row">
+        <div className="label">
+          <span>继承上一手筹码</span>
+          <span className="hint">
+            开启后玩家与 AI 的筹码跨手延续：输光要选择是否补码，AI 输光则下桌，
+            直到只剩你一人有筹码即赢下整桌。切换会重置资金与 AI 账本。
+          </span>
+        </div>
+        <input
+          type="checkbox"
+          data-testid="carry-over-toggle"
+          aria-label="继承上一手筹码"
+          checked={carryOverStacks}
+          onChange={(e) => onCarryOverChange(e.target.checked)}
+          style={{ width: 18, height: 18 }}
+        />
+      </div>
+
+      {carryOverStacks && roster.length > 0 && (
+        <div className="settings-row">
+          <div className="label">
+            <span>AI 筹码（本局账本）</span>
+            <span className="hint">输光下桌的 AI 会以半透明保留在这里</span>
+          </div>
+          <div className="roster-mini">
+            {roster.map((r) => (
+              <span key={r.id} className={`roster-mini-seat${r.out ? ' out' : ''}`}>
+                {r.name} <b>{r.out ? '已下桌' : r.stack}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="settings-row">
         <div className="label">
@@ -121,6 +167,7 @@ export function SettingsPanel({
         </div>
         <input
           type="checkbox"
+          aria-label="四色牌"
           checked={settings.fourColorDeck}
           onChange={(e) => onChange({ fourColorDeck: e.target.checked })}
           style={{ width: 18, height: 18 }}
@@ -134,6 +181,7 @@ export function SettingsPanel({
         </div>
         <input
           type="checkbox"
+          aria-label="显示快捷键提示"
           checked={settings.showShortcuts}
           onChange={(e) => onChange({ showShortcuts: e.target.checked })}
           style={{ width: 18, height: 18 }}
@@ -151,6 +199,7 @@ export function SettingsPanel({
         </div>
         <input
           type="checkbox"
+          aria-label="翻牌单挑精确枚举"
           checked={settings.enableFlopExact}
           onChange={(e) => onChange({ enableFlopExact: e.target.checked })}
           style={{ width: 18, height: 18 }}

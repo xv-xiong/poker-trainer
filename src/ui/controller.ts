@@ -11,9 +11,9 @@ import { decideAI } from '../ai/policy.js';
 import { buildReview } from '../review/ev.js';
 import { computeEquity, potOdds, AI_ITERATIONS } from '../core/equity/index.js';
 import { createRng } from '../core/rng.js';
-import { appendHistory } from '../store/schema.js';
+import { appendHistory, buildRoster } from '../store/schema.js';
 import { loadAll, saveState, saveHistory, type StorageLike } from '../store/persistence.js';
-import type { PersistedState } from '../store/schema.js';
+import type { PersistedState, RosterSeat, SessionEndKind } from '../store/schema.js';
 import type {
   ActionType,
   HandRecord,
@@ -23,6 +23,22 @@ import type {
   Stats,
 } from '../core/types.js';
 import { defaultSettings, emptyStats } from '../core/types.js';
+
+/** 一个「输光待决策」的座位。 */
+export interface PendingBust {
+  /** 'hero' 表示玩家本人，数字表示 roster 里的 AI 座位 id。 */
+  who: 'hero' | number;
+  name: string;
+  /** 当前筹码（已低于一个大盲）。 */
+  stack: number;
+}
+
+/** 继承模式下本局的最终结局。 */
+export interface SessionEnd {
+  kind: SessionEndKind;
+  /** 结局发生时的累计手数（用于结算画面标题）。 */
+  handsPlayed: number;
+}
 
 export interface ControllerSnapshot {
   state: HandState | null;
@@ -51,6 +67,14 @@ export interface ControllerSnapshot {
   notices: string[];
   /** AI 是否正在思考。 */
   aiThinking: boolean;
+  /** 是否继承上一手筹码。 */
+  carryOverStacks: boolean;
+  /** 继承模式下的 AI 座位账本（含已下桌者，供半透明展示）。 */
+  roster: RosterSeat[];
+  /** 待玩家决定的补码队列（队首即当前弹窗）。空数组表示无需决策。 */
+  pendingBusts: PendingBust[];
+  /** 本局结局；null 表示仍在进行中。 */
+  sessionEnd: SessionEnd | null;
 }
 
 type Listener = (s: ControllerSnapshot) => void;
@@ -68,6 +92,54 @@ export interface ControllerOptions {
   equityClient?: EquityClientLike;
 }
 
+/**
+ * 判定「该座位是否已输光、需要补码决策」。
+ *
+ * 阈值取「不足一个大盲」而非「等于 0」：筹码小于大盲时连盲注都交不起，
+ * 引擎无法为它发牌，继续用「<= 0」会在 1..bigBlind-1 区间留一个卡死状态。
+ */
+function isBusted(stack: number, bigBlind: number): boolean {
+  return stack < bigBlind;
+}
+
+/**
+ * 由持久化状态推导本局结局（纯函数，便于单测）。
+ *
+ * 为什么结局是**派生**的而不是存一个 sessionEnd 字段：
+ * 结局完全由「玩家是否已出局」「AI 是否全部下桌」决定，存两份状态就要同步两处，
+ * 一旦漏同步就会出现「弹窗已选不补码但结算画面不出现」。派生则不可能不一致。
+ */
+export function sessionEndOf(persisted: PersistedState): SessionEnd | null {
+  if (!persisted.carryOverStacks) return null;
+  if (persisted.heroOut) return { kind: 'hero-bust', handsPlayed: persisted.stats.handsPlayed };
+  if (persisted.roster.length > 0 && persisted.roster.every((r) => r.out)) {
+    return { kind: 'victory', handsPlayed: persisted.stats.handsPlayed };
+  }
+  return null;
+}
+
+/**
+ * 由持久化状态推导待补码队列（纯函数）。
+ *
+ * 顺序：玩家优先（他的决定会终止整局），随后按座位号。
+ * 之所以「玩家优先」：玩家一旦选择不补码，整局立即结束，其余 AI 的补码问题
+ * 已经没有意义，先问玩家可以避免让用户回答一串无效问题。
+ */
+export function pendingBustsOf(persisted: PersistedState): PendingBust[] {
+  if (!persisted.carryOverStacks) return [];
+  if (sessionEndOf(persisted)) return [];
+  const bb = persisted.settings.bigBlind;
+  const out: PendingBust[] = [];
+  if (isBusted(persisted.bankroll, bb)) {
+    out.push({ who: 'hero', name: '你', stack: persisted.bankroll });
+  }
+  for (const r of persisted.roster) {
+    if (r.out) continue;
+    if (isBusted(r.stack, bb)) out.push({ who: r.id, name: r.name, stack: r.stack });
+  }
+  return out;
+}
+
 export class GameController {
   private state: HandState | null = null;
   private persisted: PersistedState;
@@ -81,6 +153,8 @@ export class GameController {
   private revision = 0;
   /** 已提示过的存储写入失败种类（去重，避免配额耗尽时每手刷一条提示）。 */
   private saveFailuresReported = new Set<string>();
+  /** 当前这手牌实际入座的 AI 座位 id（顺序与座位号一致），用于把 results 写回账本。 */
+  private currentRosterIds: number[] = [];
   private readonly storage: StorageLike;
   private readonly equityClient: EquityClientLike | null;
   readonly heroSeat: number;
@@ -93,10 +167,12 @@ export class GameController {
     this.persisted = loaded.state;
     this.history = loaded.history;
     this.notices = loaded.notices;
-    // 同步起始筹码与设置
-    if (this.persisted.bankroll <= 0) {
+    // 自愈：资金 <= 0 只可能是损坏（继承模式下的「输光」由补码弹窗处理，不在这里重置）
+    if (!this.persisted.carryOverStacks && this.persisted.bankroll <= 0) {
       this.persisted.bankroll = this.persisted.settings.startingStack;
     }
+    // 继承模式下账本必须与设置一致，否则补码弹窗会漏掉座位
+    if (this.persisted.carryOverStacks) this.ensureRoster();
   }
 
   // ---- 订阅 ----
@@ -128,6 +204,10 @@ export class GameController {
       hint: this.hint,
       notices: this.notices,
       aiThinking: this.aiThinking,
+      carryOverStacks: this.persisted.carryOverStacks,
+      roster: this.persisted.roster,
+      pendingBusts: pendingBustsOf(this.persisted),
+      sessionEnd: sessionEndOf(this.persisted),
     };
   }
 
@@ -171,9 +251,42 @@ export class GameController {
     this.emit();
   }
 
+  /**
+   * 切换「是否继承上一手筹码」。
+   *
+   * 切换模式等价于**换一张新桌子**：资金回到起始筹码、AI 账本重建、结局清空。
+   * 这里必须同时重置 stats，否则账本恒等式（资金 = 起始 + Σ净盈亏 + Σ补码）会破，
+   * 而该恒等式有单测守着（tests/unit/controller.test.ts）。
+   */
+  setCarryOverStacks(on: boolean): void {
+    if (this.persisted.carryOverStacks === on) return;
+    this.persisted.carryOverStacks = on;
+    this.persisted.bankroll = this.persisted.settings.startingStack;
+    this.persisted.stats = emptyStats();
+    this.persisted.roster = on ? buildRoster(this.persisted.settings.seatCount - 1, this.persisted.settings.startingStack) : [];
+    this.persisted.heroOut = false;
+    this.persisted.nextDealerSeat = 0;
+    this.state = null;
+    this.lastReview = [];
+    this.lastRecord = null;
+    this.hint = null;
+    this.notices = [
+      on
+        ? '已切换为「继承筹码」模式：资金与 AI 筹码在牌局间延续，输光后可选择补码'
+        : '已切换为「单局练习」模式：每手重新从起始筹码开始',
+    ];
+    this.persistState();
+    this.emit();
+    this.startHand();
+  }
+
   resetBankroll(): void {
     this.persisted.bankroll = this.persisted.settings.startingStack;
     this.persisted.stats = emptyStats();
+    this.persisted.roster = this.persisted.carryOverStacks
+      ? buildRoster(this.persisted.settings.seatCount - 1, this.persisted.settings.startingStack)
+      : [];
+    this.persisted.heroOut = false;
     this.persistState();
     this.notices = ['资金与统计已重置'];
     this.emit();
@@ -190,11 +303,103 @@ export class GameController {
     this.emit();
   }
 
+  // ---- 继承模式：账本与补码 ----
+
+  /**
+   * 保证 AI 账本与当前桌人数一致。
+   *
+   * 已下桌的座位仍留在数组里（只是 out=true），所以长度只会在用户改了桌人数时
+   * 才对不上。此时整桌重建——「换人数」在语义上就是换一张桌子，上一桌的筹码
+   * 不该跨桌继承。
+   */
+  private ensureRoster(): void {
+    const want = Math.max(0, this.persisted.settings.seatCount - 1);
+    if (this.persisted.roster.length === want) return;
+    this.persisted.roster = buildRoster(want, this.persisted.settings.startingStack);
+  }
+
+  /**
+   * 回答「是否补码」。
+   *
+   * @param who 'hero' 或 roster 座位 id
+   * @param rebuy true=补码到起始筹码；false=不补码（玩家出局 / AI 下桌）
+   */
+  resolveBust(who: 'hero' | number, rebuy: boolean): void {
+    const s = this.persisted.settings;
+    if (!this.persisted.carryOverStacks) return;
+    if (who === 'hero') {
+      if (!isBusted(this.persisted.bankroll, s.bigBlind)) return;
+      if (rebuy) {
+        const injected = s.startingStack - this.persisted.bankroll;
+        this.persisted.bankroll = s.startingStack;
+        // 补码是外部注入，必须单独记账，否则账本恒等式失效
+        this.persisted.stats.topUps += 1;
+        this.persisted.stats.topUpAmount += injected;
+        this.notices = [`已补码到 ${s.startingStack}`];
+      } else {
+        this.persisted.heroOut = true;
+        this.notices = [];
+      }
+    } else {
+      const r = this.persisted.roster.find((x) => x.id === who);
+      if (!r || r.out || !isBusted(r.stack, s.bigBlind)) return;
+      if (rebuy) {
+        r.stack = s.startingStack;
+        this.notices = [`${r.name} 已补码到 ${s.startingStack}`];
+      } else {
+        r.out = true;
+        this.notices = [`${r.name} 已输光下桌`];
+      }
+    }
+    this.persistState();
+    this.emit();
+    // 弹窗是「开下一手」的前置闸门：所有补码问题都答完、且本局还没结束时，
+    // 立刻开下一手。否则回答完会停在空桌上，用户以为卡死。
+    // （`startHand()` 自己会再检查这两个前置条件，这里不必重复判断。）
+    this.startHand();
+  }
+
+  /**
+   * 结算画面上的「重新开始」：把资金补回起始筹码并开下一手。
+   *
+   * 必须走补码记账而不是直接赋值，理由同 setCarryOverStacks。
+   */
+  restartSession(): void {
+    const s = this.persisted.settings;
+    if (this.persisted.bankroll < s.startingStack) {
+      const injected = s.startingStack - this.persisted.bankroll;
+      this.persisted.stats.topUps += 1;
+      this.persisted.stats.topUpAmount += injected;
+    }
+    this.persisted.bankroll = s.startingStack;
+    this.persisted.roster = this.persisted.carryOverStacks
+      ? buildRoster(s.seatCount - 1, s.startingStack)
+      : [];
+    this.persisted.heroOut = false;
+    this.persisted.nextDealerSeat = 0;
+    this.state = null;
+    this.lastReview = [];
+    this.lastRecord = null;
+    this.hint = null;
+    this.notices = [];
+    this.persistState();
+    this.emit();
+    this.startHand();
+  }
+
   // ---- 开局 ----
 
   /** 开始新手牌。若资金不足则补码到起始筹码，并把补码计入统计（账本可审计）。 */
   startHand(): void {
     const s = this.persisted.settings;
+    // 会话已结束或还有补码问题没回答时，不允许开新手牌（由 UI 引导先处理）
+    if (sessionEndOf(this.persisted)) return;
+    if (pendingBustsOf(this.persisted).length > 0) return;
+    if (this.persisted.carryOverStacks) {
+      this.startHandCarryOver();
+      return;
+    }
+
     // 注意：notices 必须在函数末尾统一赋值，不能先写后被 this.notices = [] 覆盖
     let notice: string | null = null;
     if (this.persisted.bankroll < s.bigBlind) {
@@ -217,6 +422,7 @@ export class GameController {
     const seed = (Date.now() ^ (this.persisted.handCounter * 2654435761)) >>> 0;
 
     const names = ['你', 'AI-1', 'AI-2', 'AI-3', 'AI-4', 'AI-5', 'AI-6', 'AI-7', 'AI-8'];
+    this.currentRosterIds = [];
     this.state = createHand({
       handId,
       seed,
@@ -230,6 +436,46 @@ export class GameController {
     this.lastReview = [];
     this.lastRecord = null;
     this.notices = notice ? [notice] : [];
+    this.emit();
+  }
+
+  /**
+   * 继承模式下的开局：用账本里的余额作为各座位起始筹码。
+   *
+   * 桌人数是**动态**的：AI 下桌后座位数减少，因此这里传给引擎的 settings
+   * 是一份派生的副本（只改 seatCount），不写回持久化设置——否则「AI 下桌」
+   * 会污染用户配置，玩家下次改桌人数时看到的是被改过的值。
+   */
+  private startHandCarryOver(): void {
+    const s = this.persisted.settings;
+    this.ensureRoster();
+    const active = this.persisted.roster.filter((r) => !r.out && !isBusted(r.stack, s.bigBlind));
+    const seatCount = active.length + 1;
+    if (seatCount < 2) return;
+
+    const stacks = [this.persisted.bankroll, ...active.map((r) => r.stack)];
+    const names = ['你', ...active.map((r) => r.name)];
+    const derived: Settings = { ...s, seatCount };
+
+    const dealerSeat = this.persisted.nextDealerSeat % seatCount;
+    this.persisted.handCounter += 1;
+    const handId = `hand-${this.persisted.handCounter}`;
+    const seed = (Date.now() ^ (this.persisted.handCounter * 2654435761)) >>> 0;
+
+    this.currentRosterIds = active.map((r) => r.id);
+    this.state = createHand({
+      handId,
+      seed,
+      settings: derived,
+      heroSeat: this.heroSeat,
+      dealerSeat,
+      stacks,
+      names,
+    });
+    this.hint = null;
+    this.lastReview = [];
+    this.lastRecord = null;
+    this.notices = [];
     this.emit();
   }
 
@@ -429,6 +675,15 @@ export class GameController {
     for (const e of review) stats.reviewCounts[e.grade] += 1;
 
     this.persisted.bankroll += heroNet;
+    // 继承模式：把各 AI 的净盈亏写回账本。
+    // 映射依据 currentRosterIds——座位号 i+1 对应账本里的第 i 个 id，
+    // 因为下桌的 AI 不在座位里，不能直接用 roster 下标。
+    if (this.persisted.carryOverStacks) {
+      for (let i = 0; i < this.currentRosterIds.length; i++) {
+        const seat = this.persisted.roster.find((r) => r.id === this.currentRosterIds[i]);
+        if (seat) seat.stack += st.results[i + 1] ?? 0;
+      }
+    }
     this.persisted.nextDealerSeat = (st.dealerSeat + 1) % st.seatCount;
 
     this.persistState();

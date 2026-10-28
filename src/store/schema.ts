@@ -8,8 +8,14 @@
 import type { HandRecord, Settings, Stats } from '../core/types.js';
 import { defaultSettings, emptyStats } from '../core/types.js';
 
-/** 当前存储结构版本。任何破坏性字段变更都必须递增此值并补迁移函数。 */
-export const SCHEMA_VERSION = 1;
+/**
+ * 当前存储结构版本。任何破坏性字段变更都必须递增此值并补迁移函数。
+ *
+ * v1 → v2（阶段 1-1「筹码继承」）：新增三个字段
+ * `carryOverStacks` / `roster` / `heroOut`。它们都是**增量**字段，
+ * 旧数据补默认值即可，不改变任何既有字段的语义，因此迁移函数只做填充。
+ */
+export const SCHEMA_VERSION = 2;
 
 export const STORAGE_KEYS = {
   state: 'poker-trainer:state',
@@ -32,6 +38,27 @@ export const STORAGE_KEYS = {
  */
 export const HISTORY_LIMIT = 500;
 
+/**
+ * 继承模式下的一个 AI 座位。
+ *
+ * 为什么筹码要逐座位存在这里、而不是靠 `settings.startingStack` 重算：
+ * 继承模式下每一手的起始筹码是**上一手的余额**，而 `settings` 属于冻结的
+ * `src/core/`，不能加字段。因此 AI 的筹码账本落在持久化层，由
+ * `GameController` 通过 `createHand({ stacks })` 注入给引擎（引擎原生支持）。
+ */
+export interface RosterSeat {
+  /** 稳定标识（React key 与「下桌」展示用）。 */
+  id: number;
+  name: string;
+  /** 当前筹码；<= 0 表示已输光、等待补码决策。 */
+  stack: number;
+  /** 已下桌（输光且选择不补码）。下桌的座位不再参与后续牌局。 */
+  out: boolean;
+}
+
+/** 会话结束的两种结局（继承模式下才可能出现）。 */
+export type SessionEndKind = 'hero-bust' | 'victory';
+
 export interface PersistedState {
   schemaVersion: number;
   bankroll: number;
@@ -41,6 +68,25 @@ export interface PersistedState {
   nextDealerSeat: number;
   /** 手牌序号（用于生成 handId）。 */
   handCounter: number;
+  /**
+   * 是否继承上一手筹码。
+   * false（默认）= 每手重置为 startingStack 的单局练习；
+   * true = 现金局式的连续牌局，输光需补码决策。
+   */
+  carryOverStacks: boolean;
+  /** 继承模式下的 AI 座位账本；非继承模式恒为空数组。 */
+  roster: RosterSeat[];
+  /** 玩家已输光且选择「不补码」→ 本局以玩家出局告终。 */
+  heroOut: boolean;
+}
+
+/** 构造一副全新的 AI 座位账本（全部为满筹码、未下桌）。 */
+export function buildRoster(count: number, startingStack: number): RosterSeat[] {
+  const seats: RosterSeat[] = [];
+  for (let i = 0; i < Math.max(0, Math.floor(count)); i++) {
+    seats.push({ id: i + 1, name: `AI-${i + 1}`, stack: startingStack, out: false });
+  }
+  return seats;
 }
 
 export function initialState(settings?: Partial<Settings>): PersistedState {
@@ -52,6 +98,9 @@ export function initialState(settings?: Partial<Settings>): PersistedState {
     stats: emptyStats(),
     nextDealerSeat: 0,
     handCounter: 0,
+    carryOverStacks: false,
+    roster: [],
+    heroOut: false,
   };
 }
 
@@ -82,6 +131,40 @@ export function validateState(value: unknown): string[] {
     errors.push(...validateSettings(v.settings));
   }
   if (typeof v.stats !== 'object' || v.stats === null) errors.push('stats 缺失');
+  errors.push(...validateCarryOver(v));
+  return errors;
+}
+
+/**
+ * 继承模式三个新增字段的校验。
+ *
+ * 这里刻意把「字段缺失」判为不合法：`migrateState` 一定会为 v1 数据补齐默认值，
+ * 因此走到校验时字段必然存在。缺失只可能来自被手工篡改的存档，
+ * 交给归档重建路径处理比「悄悄用默认值」更符合「绝不静默」的承诺。
+ */
+function validateCarryOver(v: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  if (typeof v.carryOverStacks !== 'boolean') {
+    errors.push('carryOverStacks 非法（须为布尔值）');
+  }
+  if (typeof v.heroOut !== 'boolean') {
+    errors.push('heroOut 非法（须为布尔值）');
+  }
+  if (!Array.isArray(v.roster)) {
+    errors.push('roster 非法（须为数组）');
+    return errors;
+  }
+  for (const [i, seat] of v.roster.entries()) {
+    if (typeof seat !== 'object' || seat === null) {
+      errors.push(`roster[${i}] 不是对象`);
+      continue;
+    }
+    const s = seat as Record<string, unknown>;
+    if (typeof s.id !== 'number' || !Number.isInteger(s.id)) errors.push(`roster[${i}].id 非法`);
+    if (typeof s.name !== 'string') errors.push(`roster[${i}].name 非法`);
+    if (typeof s.stack !== 'number' || !Number.isFinite(s.stack)) errors.push(`roster[${i}].stack 非法`);
+    if (typeof s.out !== 'boolean') errors.push(`roster[${i}].out 非法`);
+  }
   return errors;
 }
 
@@ -140,9 +223,19 @@ export type Migration = (old: Record<string, unknown>) => Record<string, unknown
 
 /**
  * 版本迁移链。键为「源版本」，值为迁移到「源版本 + 1」的函数。
- * 当前只有 v1，故链为空；新增版本时在此追加，并补单测（G10）。
+ *
+ * v1 → v2：补齐筹码继承模式的三个字段。旧版本没有「继承」概念，
+ * 语义上等价于「每手重置」的单局练习，故默认 false / 空账本 / 未出局。
  */
-export const MIGRATIONS: Record<number, Migration> = {};
+export const MIGRATIONS: Record<number, Migration> = {
+  1: (old) => ({
+    ...old,
+    schemaVersion: 2,
+    carryOverStacks: typeof old.carryOverStacks === 'boolean' ? old.carryOverStacks : false,
+    roster: Array.isArray(old.roster) ? old.roster : [],
+    heroOut: typeof old.heroOut === 'boolean' ? old.heroOut : false,
+  }),
+};
 
 /** 把任意版本的状态迁移到当前版本。失败返回 null。 */
 export function migrateState(raw: Record<string, unknown>): Record<string, unknown> | null {

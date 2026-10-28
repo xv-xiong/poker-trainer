@@ -11,6 +11,8 @@ import { createMemoryStorage, type StorageLike } from '../store/persistence.js';
 import { settlementBreakdown, type SettlementLine } from '../core/showdown.js';
 import { TableView } from './components/TableView.js';
 import { ActionBar } from './components/ActionBar.js';
+import { RebuyDialog } from './components/RebuyDialog.js';
+import { SessionEndPanel } from './components/SessionEndPanel.js';
 import { ReviewPanel } from './panels/ReviewPanel.js';
 import { StatsPanel } from './panels/StatsPanel.js';
 import { HistoryPanel } from './panels/HistoryPanel.js';
@@ -18,6 +20,7 @@ import { SettingsPanel } from './panels/SettingsPanel.js';
 import { StartScreen } from './components/StartScreen.js';
 import { useTableShowcase } from './useTableShowcase.js';
 import { stepAiAction } from './showcaseStep.js';
+import { buildSessionSummary, handFeedback } from '../review/session.js';
 import './styles/tokens.css';
 import type { ActionType } from '../core/types.js';
 
@@ -209,6 +212,56 @@ export function App() {
   // 让出高度给结算内容（否则「下一手」会被挤到折叠线以下）。
   const showResult = Boolean(snap.state?.finished && table.view.settled);
 
+  /** 队首的补码决策（null 表示当前没有待决策座位）。 */
+  const pendingBust = snap.pendingBusts[0] ?? null;
+
+  /**
+   * 若这个 AI 选择「不补码」，是否就只剩玩家有筹码（即赢下整桌）。
+   * 判据：除它之外，没有别的「未下桌」AI 还留着。正在等待决策的其它座位
+   * 仍算「有筹码」（它们可以补码），所以只看 out 标志。
+   */
+  const winTableIfOut =
+    pendingBust !== null &&
+    pendingBust.who !== 'hero' &&
+    snap.roster.filter((r) => !r.out && r.id !== pendingBust.who).length === 0;
+
+  /** 本局总结（仅在继承模式出现结局时计算）。 */
+  const sessionSummary = useMemo(() => {
+    if (!snap.sessionEnd) return null;
+    return buildSessionSummary({
+      stats: snap.stats,
+      history: snap.history,
+      bigBlind: Math.max(1, snap.settings.bigBlind),
+      kind: snap.sessionEnd.kind,
+    });
+  }, [snap.sessionEnd, snap.stats, snap.history, snap.settings.bigBlind]);
+
+  /** 单局练习模式下的单手点评与累计进度。 */
+  const feedback = useMemo(
+    () => handFeedback(snap.lastReview, Math.max(1, snap.settings.bigBlind)),
+    [snap.lastReview, snap.settings.bigBlind],
+  );
+  const cumulative = useMemo(() => {
+    const hands = Math.max(1, snap.stats.handsPlayed);
+    const bb = Math.max(1, snap.settings.bigBlind);
+    return {
+      hands: snap.stats.handsPlayed,
+      netBB: snap.stats.netProfit / bb,
+      vpip: snap.stats.vpipHands / hands,
+    };
+  }, [snap.stats, snap.settings.bigBlind]);
+
+  const handleResolveBust = (rebuy: boolean) => {
+    if (!pendingBust) return;
+    aiGuardRef.current = 0;
+    controller.resolveBust(pendingBust.who, rebuy);
+  };
+
+  const handleRestartSession = () => {
+    aiGuardRef.current = 0;
+    controller.restartSession();
+  };
+
   // 开始界面：未进桌之前不渲染牌桌与顶部标签栏，
   // 避免「还没开始就能点到设置/统计」的错位感。
   if (!entered) {
@@ -279,16 +332,32 @@ export function App() {
            在剩余高度里垂直居中（布局见 app.css 的 .game-stage）。
            空白区域过大时靠它把内容拉到视口中部，而不是全部堆在顶部。 */
         <div
-          className={`game-stage${showResult ? ' has-result' : ''}`}
+          className={`game-stage${showResult && !sessionSummary ? ' has-result' : ''}`}
           role="tabpanel"
           id="panel-table"
           aria-labelledby="tab-table"
         >
-          {!snap.state ? (
+          {/* 本局已结束（继承模式下玩家出局 / 赢下整桌）：整块替换牌桌，
+              因为此时既没有下一手可打，牌桌也不再是用户关心的焦点。 */}
+          {sessionSummary && snap.sessionEnd && (
+            <SessionEndPanel
+              kind={snap.sessionEnd.kind}
+              summary={sessionSummary}
+              bankroll={snap.bankroll}
+              bigBlind={snap.settings.bigBlind}
+              onRestart={handleRestartSession}
+              onOpenReview={() => setTab('review')}
+              onOpenStats={() => setTab('stats')}
+            />
+          )}
+
+          {!sessionSummary && !snap.state && (
             <div className="panel">
               <div className="empty">正在发牌…</div>
             </div>
-          ) : (
+          )}
+
+          {!sessionSummary && snap.state && (
             <div className="table-wrap">
               <TableView
                 state={snap.state}
@@ -296,6 +365,27 @@ export function App() {
                 revealAll={false}
                 view={table.view}
               />
+              {/* 继承模式的「座位账本」：把每个 AI 的当前筹码摆在牌桌下方。
+                  下桌的 AI 用半透明 + 删除线保留在条带里，而不是直接从界面消失——
+                  「谁被我打下桌了」是这局的核心进度感，抹掉就看不出来了。 */}
+              {snap.carryOverStacks && snap.roster.length > 0 && (
+                <div className="roster-strip" data-testid="roster-strip">
+                  <span className="roster-me">
+                    你 <b>{snap.bankroll}</b>
+                  </span>
+                  {snap.roster.map((r) => (
+                    <span
+                      key={r.id}
+                      className={`roster-seat${r.out ? ' out' : ''}`}
+                      data-testid={`roster-${r.id}`}
+                      data-out={r.out ? '1' : '0'}
+                      title={r.out ? `${r.name} 已输光下桌` : `${r.name} 当前筹码 ${r.stack}`}
+                    >
+                      {r.name} <b>{r.out ? '已下桌' : r.stack}</b>
+                    </span>
+                  ))}
+                </div>
+              )}
               <ActionBar
                 legal={snap.legal}
                 pot={pot}
@@ -315,7 +405,7 @@ export function App() {
             </div>
           )}
 
-          {showResult && snap.state && (
+          {showResult && !sessionSummary && snap.state && (
             <div className="panel result-panel">
               <h2>本手结果</h2>
               <div className="result-grid">
@@ -343,6 +433,25 @@ export function App() {
                       <div className="v">{snap.state.pots.length}</div>
                     </div>
                   </div>
+
+                  {/* 单局练习模式的即时反馈：每手筹码重置，所以反馈要「就这一手」
+                      讲清楚最该改的一处，并把累计进度摆出来给成就感。 */}
+                  {!snap.carryOverStacks && (
+                    <div className="hand-feedback">
+                      <div className="hf-title">本手点评</div>
+                      <p className="hf-verdict">{feedback.verdict}</p>
+                      <p className="muted small">
+                        单局练习累计 {cumulative.hands} 手 · 净盈亏{' '}
+                        {cumulative.netBB >= 0 ? '+' : ''}
+                        {cumulative.netBB.toFixed(1)} BB · 入池率{' '}
+                        {Math.round(cumulative.vpip * 100)}%
+                      </p>
+                      <p className="muted small">
+                        单局练习模式下每手筹码重置为起始筹码，适合反复练同一类局面；
+                        想让筹码在牌局间延续，可在「设置」里打开「继承上一手筹码」。
+                      </p>
+                    </div>
+                  )}
 
                   <div className="action-row" style={{ marginTop: 12 }}>
                     <button className="primary" onClick={() => setTab('review')}>
@@ -420,8 +529,22 @@ export function App() {
             onChange={(patch) => controller.updateSettings(patch)}
             onResetBankroll={() => controller.resetBankroll()}
             handInProgress={Boolean(snap.state && !snap.state.finished)}
+            carryOverStacks={snap.carryOverStacks}
+            onCarryOverChange={(on) => controller.setCarryOverStacks(on)}
+            roster={snap.roster}
           />
         </div>
+      )}
+
+      {/* 补码决策是模态的：它挡在牌桌之上，因为「是否继续」决定了这一局怎么走 */}
+      {pendingBust && (
+        <RebuyDialog
+          bust={pendingBust}
+          startingStack={snap.settings.startingStack}
+          bigBlind={snap.settings.bigBlind}
+          winTableIfOut={winTableIfOut}
+          onResolve={handleResolveBust}
+        />
       )}
     </div>
   );

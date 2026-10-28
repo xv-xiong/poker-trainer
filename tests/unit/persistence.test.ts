@@ -164,7 +164,8 @@ describe('G10 持久化健壮性', () => {
       });
       const migrated = migrateState({ schemaVersion: 0, bankroll: 777 });
       expect(migrated).not.toBeNull();
-      expect(migrated!.schemaVersion).toBe(1);
+      // v0 -> v1（本测试临时注册）之后，真实迁移链还会继续 1 -> 2（阶段 1-1 新增字段）
+      expect(migrated!.schemaVersion).toBe(SCHEMA_VERSION);
       expect(migrated!.bankroll).toBe(777);
 
       // 真实加载路径：v0 数据应被迁移而非归档

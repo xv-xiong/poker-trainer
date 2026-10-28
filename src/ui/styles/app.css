@@ -1575,3 +1575,104 @@ tr.grade-major td {
 .game-stage.has-result > .table-wrap > .action-panel {
   display: none;
 }
+
+/* ── 继承模式的座位账本（牌桌下方） ───────────────────────────────
+   把玩家与每个 AI 的当前筹码摆出来。下桌的 AI 不删掉，而是半透明 +
+   删除线保留，让「谁被打下桌了」这条进度看得见。 */
+.roster-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.roster-strip .roster-me {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(231, 193, 131, 0.14);
+  border: 1px solid rgba(231, 193, 131, 0.4);
+  color: var(--gold, #e7c183);
+  white-space: nowrap;
+}
+.roster-strip .roster-seat {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.roster-strip .roster-seat b {
+  color: var(--text);
+  font-weight: 600;
+  margin-left: 2px;
+}
+/* 已下桌：半透明 + 删除线，仍占位，表示「这张位子空了」而不是「这个人不存在」。 */
+.roster-strip .roster-seat.out {
+  opacity: 0.45;
+  text-decoration: line-through;
+  border-style: dashed;
+}
+.roster-strip .roster-seat.out b {
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+/* 设置面板里的同一份账本（紧凑版） */
+.roster-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  max-width: 420px;
+}
+.roster-mini-seat {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.roster-mini-seat b {
+  color: var(--text);
+  font-weight: 600;
+}
+.roster-mini-seat.out {
+  opacity: 0.5;
+  text-decoration: line-through;
+  border-style: dashed;
+}
+
+/* ── 单局练习的「本手点评」 ──────────────────────────────────────
+   不继承筹码时每手都会重置，所以反馈必须「就这一手」讲清楚，
+   并把累计进度摆出来给成就感，避免用户觉得练了等于没练。 */
+.hand-feedback {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold, #e7c183);
+  border-radius: var(--radius);
+  background: rgba(231, 193, 131, 0.05);
+}
+.hand-feedback .hf-title {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--gold, #e7c183);
+  margin-bottom: 4px;
+}
+.hand-feedback .hf-verdict {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.hand-feedback p.muted {
+  margin: 2px 0;
+}
