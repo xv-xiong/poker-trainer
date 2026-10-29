@@ -1775,3 +1775,10 @@ tr.grade-major td {
 .hand-feedback p.muted {
   margin: 2px 0;
 }
+
+/* 历史面板行内操作（回放 / 详情）：并排且不换行，避免把行高撑高 */
+.history-actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}

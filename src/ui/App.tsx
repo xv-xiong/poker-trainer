@@ -19,6 +19,8 @@ import { HistoryPanel } from './panels/HistoryPanel.js';
 import { SettingsPanel } from './panels/SettingsPanel.js';
 import { StartScreen } from './components/StartScreen.js';
 import { useTableShowcase } from './useTableShowcase.js';
+import { useReplay } from './useReplay.js';
+import { ReplayPanel } from './components/ReplayPanel.js';
 import { stepAiAction } from './showcaseStep.js';
 import { buildSessionSummary, handFeedback } from '../review/session.js';
 import './styles/tokens.css';
@@ -93,6 +95,12 @@ export function App() {
     heroSeat: controller.heroSeat,
     runAiStep: () => runAiRef.current(),
   });
+
+  /**
+   * 回放态机。刻意与演出层分开：回放只翻已录好的快照，不参与活牌局推进。
+   * 放在 App 层而不是历史面板内部，是为了切到别的标签再切回来时进度不丢。
+   */
+  const replay = useReplay();
 
   useEffect(() => {
     runAiRef.current = () => {
@@ -606,7 +614,26 @@ export function App() {
       )}
       {tab === 'history' && (
         <div role="tabpanel" id="panel-history" aria-labelledby="tab-history">
-          <HistoryPanel history={snap.history} onClear={() => controller.clearHistory()} />
+          {/* 回放期间整块换成牌桌视图；退出后回到列表 */}
+          {replay.session && replay.frame ? (
+            <ReplayPanel replay={replay} />
+          ) : (
+            <>
+              {replay.error && (
+                <div className="notice" role="alert">
+                  <span>这一手不可回放：{replay.error}</span>
+                  <button className="ghost" onClick={replay.dismissError}>
+                    知道了
+                  </button>
+                </div>
+              )}
+              <HistoryPanel
+                history={snap.history}
+                onClear={() => controller.clearHistory()}
+                onReplay={replay.open}
+              />
+            </>
+          )}
         </div>
       )}
       {tab === 'settings' && (

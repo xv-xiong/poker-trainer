@@ -6,13 +6,17 @@ import { Fragment, useState } from 'react';
 import { ACTION_LABELS, STREET_LABELS, type HandRecord } from '../../core/types.js';
 import { cardToString } from '../../core/cards.js';
 import { exportCsv, exportJson, downloadText } from '../../store/export.js';
+import { replayabilityOf } from '../replay.js';
 
 export function HistoryPanel({
   history,
   onClear,
+  onReplay,
 }: {
   history: readonly HandRecord[];
   onClear: () => void;
+  /** 点「回放」时回调；不传则不渲染回放按钮（便于其他入口复用本面板）。 */
+  onReplay?: (record: HandRecord) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -63,6 +67,8 @@ export function HistoryPanel({
               const hole = h.holeCards[h.heroSeat] ?? [];
               const deviations = h.review.filter((r) => r.grade !== 'ok').length;
               const isOpen = expanded === h.handId;
+              // 结构残缺的记录直接置灰：比点进去才报错更早暴露问题
+              const replayBlocked = onReplay ? replayabilityOf(h) : '未启用';
               return (
                 <Fragment key={h.handId}>
                   <tr>
@@ -76,9 +82,22 @@ export function HistoryPanel({
                     <td className="num">{h.review.length}</td>
                     <td className="num">{deviations > 0 ? deviations : '—'}</td>
                     <td>
-                      <button className="ghost" onClick={() => setExpanded(isOpen ? null : h.handId)}>
-                        {isOpen ? '收起' : '详情'}
-                      </button>
+                      <div className="history-actions">
+                        {onReplay && (
+                          <button
+                            className="ghost"
+                            data-testid={`replay-${h.handId}`}
+                            onClick={() => onReplay(h)}
+                            disabled={replayBlocked !== null}
+                            title={replayBlocked ?? '在牌桌上逐步重放这一手（只读，不写入统计）'}
+                          >
+                            回放
+                          </button>
+                        )}
+                        <button className="ghost" onClick={() => setExpanded(isOpen ? null : h.handId)}>
+                          {isOpen ? '收起' : '详情'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {isOpen && (

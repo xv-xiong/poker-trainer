@@ -5,7 +5,7 @@
 ## [Unreleased]
 
 基于 2026-10-19 全方位评估报告（`poker-trainer-assessment-report.md`）的修复批次。
-本 `[Unreleased]` 段包含九批改动：本节的评估修复批次、文末的
+本 `[Unreleased]` 段包含十批改动：本节的评估修复批次、文末的
 「第二批：AI 节奏与决策行为」（AI 思考时长、弃牌后流程、跟注率与去机械化）、
 「第三批：界面布局」（操作仪表盘移到牌桌下方、整页居中）、
 「第四批：采纳第三方审计方案」（复盘 EV 模型、dev 白屏、座位几何、
@@ -13,7 +13,8 @@
 「第六批：审计剩余项 · 阶段一」（盈亏配色真 bug、设置生效提示、全下二次确认、无障碍三项）、
 「第七批：筹码继承模式 · 阶段 1-1」（可选的筹码继承、补码询问、出局/赢下整桌结算），
 「第八批：审计剩余项 · 阶段二」（节奏三档、长按 S 跳过等待），
-以及「第九批：审计剩余项 · 阶段 2-1」（首屏直接编辑建桌参数）。
+「第九批：审计剩余项 · 阶段 2-1」（首屏直接编辑建桌参数），
+以及「第十批：审计剩余项 · 阶段三」（手牌回放）。
 **`src/core/` 零改动**（14 个文件哈希未变，`git status --short -- src/core` 为空），
 金额与结算逻辑不受影响。
 
@@ -686,6 +687,65 @@
   `value`——这比旧的 `toContainText` **更强**：文本对得上但控件没接上受控值时旧断言会漏过。
 - `npm run verify` 11 道闸门全绿：G1｜G2–G7,G10（20 文件 / 297 用例）｜G9a｜G9b｜G9c｜
   G11 dev 冒烟｜G8（60 passed / 4 skipped，共 64 个用例）。
+
+### 第十批：审计剩余项 · 阶段三 —— 手牌回放（2026-10-29）
+
+审计指出：历史面板只列动作流水，不能回看某一手；而 `HandRecord` 里
+`seed` + `actions` + `results` 本来就都在，回放是纯前端、零新增数据的
+能力——不利用反而浪费。
+
+本批新增「任意一手都能在牌桌上逐步重放」，并把它做成与实时演出**完全
+隔离**的只读通道。
+
+`src/core/` 仍为零改动（14 个文件哈希未变）；未新增任何依赖。
+
+#### 新增
+
+- **回放帧生成**（新增 `src/ui/replay.ts`，纯函数、零 React）：
+  `buildReplayFrames(record)` 用 `record.seed` 重建牌局，逐条 `applyAction`
+  重放出每个动作后的快照，返回 `{ ok: true, frames }` 或 `{ ok: false, reason }`。
+  **每帧必须深拷贝**——`applyAction` 是原地修改 `HandState`，共享引用会让
+  每一帧都显示末帧状态（这类 bug 看起来像「回放跳到最后」，很难反查）。
+- **结构预检** `replayabilityOf(record)`：只查字段完整性、不重放，供历史面板
+  提前把按钮置灰。500 手历史若逐条完整重放一遍才能知道能不能放，打开面板
+  就要卡住。
+- **三道一致性校验**：重放出的底牌 / 公共牌 / 结算结果要与记录逐项相符；
+  每个动作记录的座位要与重放时真正轮到的座位相符。不一致时宁可报「这一手
+  不可回放」，也不显示一个**假牌局**——错误的复盘比没有复盘更糟。
+- **回放态机**（新增 `src/ui/useReplay.ts`）：`open / close / goTo / next / prev /
+  togglePlay`，自动播放 900ms 一帧，到末帧停住不循环。
+- **回放面板**（新增 `src/ui/components/ReplayPanel.tsx` + `src/ui/styles/replay.css`）：
+  复用 `TableView` 渲染，顶部条「第 N 手回放 · 第 k / m 步」+ 上一步 / 自动播放 /
+  下一步 / 退出，下方帧列表可点击跳转。
+- **历史面板入口**：`HistoryPanel` 每行新增「回放」按钮
+  （`data-testid="replay-<handId>"`），不可回放时置灰并在 `title` 写明原因。
+
+#### 设计决定
+
+- **回放与演出层彻底隔离**：`useReplay` 不 import `useTableShowcase`，只借用
+  `ShowcaseView` 这个纯数据结构传给 `TableView`（`thinking: false`、
+  `canHeroAct: false`）。演出层有自己的定时器、揭示游标与 dev 断言，把它拖进
+  只读回放会互相污染（阶段 1-1 已经踩过一次「两个 effect 抢同一跨手状态」）。
+- **回放状态放在 `App` 层而非 `HistoryPanel` 内**：切标签不丢进度。
+- **失败不抛错**：`open` 失败只设 `error`，界面提示「这一手不可回放：<原因>」，
+  绝不白屏（审计 P0-2 的教训：只在开发期生效的不变量 throw 出去就是白屏）。
+- **不写库**：回放全程不调用 controller、不 persist。E2E 用「退出前后
+  `localStorage` 字符串逐字节比对」来证明，而不是只看统计数字没变。
+
+#### 验证
+
+- 新增 `tests/unit/replay.test.ts`（20 条）：帧数 = 动作数 + 1；帧 i 恰含 i 条动作；
+  帧 0 底池 = 小盲 + 大盲；末帧 `finished` 且 `board` / `results` 与记录一致；
+  **不修改传入的 record**（JSON 前后比对）；**帧间不共享引用**（改帧 0 不影响帧 1）；
+  弃牌结束手与全下摊牌手都能回放；`replayabilityOf` 六种拒绝；底牌不符 / 公共牌
+  不符 / 结算不符 / 座位错乱 / 动作多余 各返回 `ok: false` 且 reason 含对应关键词。
+- 新增 `tests/e2e/replay.spec.ts`（3 条）：①逐帧步进（帧数 = 动作数 + 1）、公共牌
+  只可能是 0 / 3 / 4 / 5 且单调不减、末帧未弃牌座位各亮 2 张底牌、退出后
+  `localStorage` 逐字节不变、无 console error；②自动播放至少推进 2 帧、暂停后
+  2.2s 内不再前进；③能过 `validateHistory`（只查 handId / seed / actions）但缺
+  `initialStacks` 的记录，「回放」按钮 disabled 且 `title` 说明原因、点不进面板。
+- `npm run verify` 11 道闸门全绿：G1｜G2–G7,G10（21 文件 / 317 用例）｜G9a｜G9b｜G9c｜
+  G11 dev 冒烟｜G8（63 passed / 4 skipped，共 67 个用例）。
 
 ## [1.1.0] - 2026-10-16
 

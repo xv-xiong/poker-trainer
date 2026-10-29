@@ -1,0 +1,108 @@
+/**
+ * 回放视图样式。
+ *
+ * 回放复用牌桌（`.felt`），但牌桌在历史页里没有「吃满视口」的语境，
+ * 因此这里只给它一个居中的、有上限的高度；动作日志单独可滚动，
+ * 避免 40+ 个动作把整页拉得极长。
+ */
+
+.replay-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.replay-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 18px;
+}
+
+.replay-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.replay-heading h2 {
+  margin: 0;
+}
+
+.replay-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 牌桌在回放里不需要撑满视口：给一个有上限的高度，座位坐标是百分比，
+   高度变化只会等比缩放，不会破坏环绕布局。 */
+.replay-stage {
+  display: flex;
+  justify-content: center;
+}
+
+.replay-stage > .felt {
+  width: 100%;
+  max-width: 1040px;
+  min-height: clamp(340px, 48vh, 520px);
+}
+
+.replay-log {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 216px;
+  overflow-y: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--bg-0);
+}
+
+.replay-log li > button {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-1);
+  font-size: 13px;
+  text-align: left;
+}
+
+.replay-log li > button:hover {
+  background: var(--bg-1);
+}
+
+.replay-log li.cur > button {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
+.replay-log-index {
+  flex: 0 0 28px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.replay-log li.cur .replay-log-index {
+  color: inherit;
+}
+
+@media (max-width: 900px) {
+  .replay-stage > .felt {
+    min-height: clamp(300px, 40vh, 420px);
+  }
+
+  .replay-log {
+    max-height: 160px;
+  }
+}
