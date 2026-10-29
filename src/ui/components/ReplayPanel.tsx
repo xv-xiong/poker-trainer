@@ -33,6 +33,15 @@ function viewOf(frame: ReplayFrame): ShowcaseView {
   };
 }
 
+/**
+ * 标题文案。当前手牌 id 形如 `hand-12`，直接拼成「第 hand-12 手回放」很别扭；
+ * 老存档或导入数据可能是任意 id，此时原样显示而不是丢掉信息。
+ */
+function headingOf(handId: string): string {
+  const matched = /^hand-(\d+)$/.exec(handId);
+  return matched ? `第 ${matched[1]} 手回放` : `${handId} 回放`;
+}
+
 export function ReplayPanel({ replay }: { replay: ReplayController }) {
   const { session, frame } = replay;
   const view = useMemo(() => (frame ? viewOf(frame) : undefined), [frame]);
@@ -47,7 +56,7 @@ export function ReplayPanel({ replay }: { replay: ReplayController }) {
     <div className="panel replay-panel" data-testid="replay-panel">
       <div className="replay-bar">
         <div className="replay-heading">
-          <h2>第 {record.handId} 手回放</h2>
+          <h2>{headingOf(record.handId)}</h2>
           <span className="muted small" data-testid="replay-progress">
             第 {replay.index} / {steps} 步 · {replayStepLabel(record, frame)}
           </span>
