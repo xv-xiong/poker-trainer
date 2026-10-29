@@ -347,6 +347,11 @@ export function App() {
       <div className={`app ${snap.settings.fourColorDeck ? '' : 'two-color'}`}>
         <StartScreen
           onStart={() => setEntered(true)}
+          settings={snap.settings}
+          onSettingsChange={(patch) => controller.updateSettings(patch)}
+          record={{ handsPlayed: snap.stats.handsPlayed, netProfit: snap.stats.netProfit, bankroll: snap.bankroll }}
+          carryOverStacks={snap.carryOverStacks}
+          onCarryOverChange={(on) => controller.setCarryOverStacks(on)}
           pace={snap.pace}
           onPaceChange={(p) => controller.setPace(p)}
         />

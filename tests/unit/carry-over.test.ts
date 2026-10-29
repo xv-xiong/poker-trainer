@@ -449,3 +449,101 @@ describe('阶段 1-1：总结与单手点评', () => {
     expect(fb.verdict).toContain('4.5 BB');
   });
 });
+
+/**
+ * 阶段 2-1：首屏可以直接改建桌参数，于是「改了之后到底生不生效」变成了
+ * 用户会当场验证的事。
+ *
+ * 非继承模式下它下一手自然生效（`startHand` 用
+ * `new Array(seatCount).fill(startingStack)` 现取现用）。但**继承模式**下开局
+ * 筹码来自账本 `[bankroll, ...roster.map(r => r.stack)]`，根本不读
+ * `settings.startingStack` —— 只 merge 设置不重建账本，用户会看到「把起始筹码
+ * 从 1000 改成 2000，牌桌上还是 1000」，改完像没改。
+ *
+ * 因此继承模式下改这两个字段按「换一张新桌子」处理。这组测试钉住该行为，
+ * 也钉住「不许顺手把非继承模式也重置掉」——那会让单局练习的累计战绩凭空消失。
+ */
+describe('阶段 2-1：继承模式下改建桌参数会重开一局', () => {
+  it('继承模式下改起始筹码：资金、AI 筹码、统计都按新值重建', () => {
+    const c = seededController({
+      settings: SIX,
+      carryOverStacks: true,
+      bankroll: 1750,
+      roster: rosterOf([900, 1100, 1300, 700, 1500]),
+      stats: { ...emptyStats(), handsPlayed: 23, netProfit: 750 },
+    });
+    expect(c.snapshot().bankroll).toBe(1750);
+
+    c.updateSettings({ startingStack: 2000 });
+
+    const s = c.snapshot();
+    expect(s.settings.startingStack).toBe(2000);
+    expect(s.bankroll).toBe(2000); // 账本重建：不是 1750
+    expect(s.stats.handsPlayed).toBe(0); // 新桌子，战绩清零
+    expect(s.stats.netProfit).toBe(0);
+    // AI 筹码也按新起始筹码重建
+    const roster = s.roster ?? [];
+    expect(roster).toHaveLength(5);
+    for (const r of roster) expect(r.stack).toBe(2000);
+  });
+
+  it('继承模式下改桌人数：AI 座位数跟着变，且不带上一桌的筹码', () => {
+    const c = seededController({
+      settings: SIX,
+      carryOverStacks: true,
+      bankroll: 1500,
+      roster: rosterOf([800, 800, 800, 800, 800]),
+      stats: { ...emptyStats(), handsPlayed: 11 },
+    });
+
+    c.updateSettings({ seatCount: 2 });
+
+    const s = c.snapshot();
+    expect(s.settings.seatCount).toBe(2);
+    expect(s.roster).toHaveLength(1); // 2 人桌 = 1 个 AI
+    expect(s.roster![0].stack).toBe(s.settings.startingStack);
+    expect(s.bankroll).toBe(s.settings.startingStack);
+    expect(s.stats.handsPlayed).toBe(0);
+  });
+
+  it('改非建桌参数（AI 难度）不重建账本', () => {
+    const c = seededController({
+      settings: SIX,
+      carryOverStacks: true,
+      bankroll: 1750,
+      roster: rosterOf([900, 1100, 1300, 700, 1500]),
+      stats: { ...emptyStats(), handsPlayed: 23, netProfit: 750 },
+    });
+
+    c.updateSettings({ aiTier: 'hard' });
+
+    const s = c.snapshot();
+    expect(s.settings.aiTier).toBe('hard');
+    expect(s.bankroll).toBe(1750); // 账本没动
+    expect(s.stats.handsPlayed).toBe(23);
+  });
+
+  it('非继承模式下改起始筹码不重置战绩（下一手自然生效）', () => {
+    const c = seededController({
+      settings: SIX,
+      carryOverStacks: false,
+      bankroll: 1750,
+      roster: [],
+      stats: { ...emptyStats(), handsPlayed: 23, netProfit: 750 },
+    });
+
+    c.updateSettings({ startingStack: 2000, seatCount: 9 });
+
+    const s = c.snapshot();
+    expect(s.settings.startingStack).toBe(2000);
+    expect(s.settings.seatCount).toBe(9);
+    // 单局练习模式的累计战绩属于用户，不该因为改建桌参数而消失
+    expect(s.stats.handsPlayed).toBe(23);
+    expect(s.stats.netProfit).toBe(750);
+    // 资金按差额平移：1750 + (2000 - 1000) = 2750。
+    // 不平移的话顶部显示 1750 而牌桌座位已是 2000，同一屏两个数对不上。
+    expect(s.bankroll).toBe(2750);
+    // 平移不改变「资金 - 起始筹码 = 累计净盈亏」这个关系
+    expect(s.bankroll - s.settings.startingStack).toBe(s.stats.netProfit);
+  });
+});

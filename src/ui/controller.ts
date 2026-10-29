@@ -248,10 +248,64 @@ export class GameController {
     if (!saveHistory(this.storage, this.history)) this.reportSaveFailure('history');
   }
 
+  /**
+   * 改设置。
+   *
+   * 绝大多数设置项只在下一次开局时被读取，因此「改完不立刻生效」是预期行为
+   * （设置面板会给它们挂「下一手生效」标签）。
+   *
+   * 但**继承筹码模式下**有两个例外：`startingStack` 与 `seatCount` 决定的不是
+   * 「下一手发多少」，而是「这张桌子上现在有多少筹码、坐着几个人」——而继承模式
+   * 的开局筹码来自账本（`[bankroll, ...roster.map(r => r.stack)]`），根本不读
+   * `settings.startingStack`。若只 merge 设置不重建账本，用户会看到「把起始筹码
+   * 从 1000 改成 2000，牌桌上还是 1000」，改完像没改。
+   *
+   * 所以这里按「换一张新桌子」处理：重建账本、清空战绩与结局。语义与
+   * `setCarryOverStacks` 完全一致（它也是换桌子），因此共用 `resetTable()`。
+   */
   updateSettings(patch: Partial<Settings>): void {
-    this.persisted.settings = { ...this.persisted.settings, ...patch };
+    const before = this.persisted.settings;
+    this.persisted.settings = { ...before, ...patch };
+    const after = this.persisted.settings;
+    const stackChanged = after.startingStack !== before.startingStack;
+    const tableChanged = after.seatCount !== before.seatCount || stackChanged;
+    if (this.persisted.carryOverStacks && tableChanged) {
+      this.resetTable();
+      this.notices = ['已按新的建桌参数重开一局（继承模式下改动建桌参数会清零本局战绩）'];
+      this.persistState();
+      this.emit();
+      this.startHand();
+      return;
+    }
+    // 非继承模式下资金是「起始筹码 + Σ各手净盈亏」的累计值（见 startHand / finalizeHand）。
+    // 改了起始筹码却不平移资金，界面顶部会显示旧值（1000）而牌桌座位已经是新值（2000），
+    // 同一个界面上两个数对不上。按差额平移可保住这个恒等式，同时不动战绩（那是用户的历史）。
+    if (stackChanged) this.persisted.bankroll += after.startingStack - before.startingStack;
     this.persistState();
     this.emit();
+  }
+
+  /**
+   * 把当前桌子恢复成「刚坐下」的状态：资金回起始筹码、账本重建、结局与进行中的手牌清空。
+   *
+   * 必须同时重置 `stats`，否则账本恒等式（资金 = 起始 + Σ净盈亏 + Σ补码）会破，
+   * 该恒等式有单测守着（tests/unit/controller.test.ts 的「账本恒等式」用例）。
+   *
+   * 注意这里**不**负责 emit / persist / startHand：调用方可能还要先写 notices
+   * （见 `updateSettings`）或先改 `carryOverStacks` 标志（见 `setCarryOverStacks`），
+   * 由调用方统一收尾，避免中间态被渲染出去。
+   */
+  private resetTable(): void {
+    const s = this.persisted.settings;
+    this.persisted.bankroll = s.startingStack;
+    this.persisted.stats = emptyStats();
+    this.persisted.roster = this.persisted.carryOverStacks ? buildRoster(s.seatCount - 1, s.startingStack) : [];
+    this.persisted.heroOut = false;
+    this.persisted.nextDealerSeat = 0;
+    this.state = null;
+    this.lastReview = [];
+    this.lastRecord = null;
+    this.hint = null;
   }
 
   /**
@@ -281,15 +335,7 @@ export class GameController {
   setCarryOverStacks(on: boolean): void {
     if (this.persisted.carryOverStacks === on) return;
     this.persisted.carryOverStacks = on;
-    this.persisted.bankroll = this.persisted.settings.startingStack;
-    this.persisted.stats = emptyStats();
-    this.persisted.roster = on ? buildRoster(this.persisted.settings.seatCount - 1, this.persisted.settings.startingStack) : [];
-    this.persisted.heroOut = false;
-    this.persisted.nextDealerSeat = 0;
-    this.state = null;
-    this.lastReview = [];
-    this.lastRecord = null;
-    this.hint = null;
+    this.resetTable();
     this.notices = [
       on
         ? '已切换为「继承筹码」模式：资金与 AI 筹码在牌局间延续，输光后可选择补码'

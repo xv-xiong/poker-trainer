@@ -282,38 +282,91 @@ select:focus {
   letter-spacing: -0.01em;
 }
 
-.lobby-facts {
+/* 建桌参数（阶段 2-1）：首屏即可编辑的四个字段。
+   两列网格而不是原来「只读 4 个数字块」的排法——编辑态需要给标签、
+   输入框、单位提示各自的位置，一行放两个才不会把卡片撑得太高。 */
+.lobby-setup {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin: 0 0 18px;
+  gap: 12px;
+  margin: 0 0 16px;
 }
 
-.fact {
-  background: var(--bg-1);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  padding: 10px 12px;
+.lobby-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
 }
 
-.fact dt {
+.lobby-field > label {
   font-size: 11px;
   letter-spacing: 0.06em;
   color: var(--fg-2);
   text-transform: uppercase;
 }
 
-.fact dd {
-  margin: 4px 0 0;
-  font-size: 16px;
-  font-family: var(--font-num);
-  font-variant-numeric: var(--mono-tabular);
-  color: var(--fg-0);
+/* 控件吃满所在列宽：首屏两列布局里固定像素宽度会让两列视觉不对齐 */
+.lobby-field > input,
+.lobby-field > select {
+  width: 100%;
 }
 
-.fact dd .muted {
-  font-family: var(--font-ui);
-  font-size: 12px;
+.lobby-field-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  /* 与输入框之间留一点呼吸，避免小字贴在边框上 */
+  margin-top: 1px;
+  color: var(--muted);
+  font-family: var(--font-num);
+  font-variant-numeric: var(--mono-tabular);
+}
+
+/* 盲注是「小盲 / 大盲」一对，必须并排才看得出它们的从属关系；
+   中间的分隔符用 aria-hidden 藏掉（读屏只报两个带 aria-label 的输入框）。 */
+.lobby-blind-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lobby-blind-pair > input {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+}
+
+/* 分隔符必须自己居中：父级是 flex + align-items:center，但 <span> 默认按
+   行内基线摆放，两个 number 输入框的字体度量不同时斜杠会视觉上偏下。
+   显式 flex + line-height:1 把它钉在垂直中线。 */
+.lobby-blind-pair > span {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  line-height: 1;
+  color: var(--muted);
+}
+
+/* 继承模式开关：它决定「起始筹码」的含义，所以放在参数区与战绩之间 */
+.lobby-mode {
+  padding: 10px 12px;
+  margin: 0 0 4px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+
+.lobby-mode-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lobby-mode-note {
+  margin: 6px 0 0;
+  line-height: 1.45;
 }
 
 .lobby-record {

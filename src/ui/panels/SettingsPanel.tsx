@@ -9,6 +9,7 @@
  */
 
 import { AI_TIER_LABELS, type AITier, type Settings } from '../../core/types.js';
+import { clampBigBlind, clampSmallBlind, clampStartingStack } from '../format.js';
 import type { Pace, RosterSeat } from '../../store/schema.js';
 
 /** 生效时机标签：这些项只在开新一手时读取。 */
@@ -93,7 +94,7 @@ export function SettingsPanel({
           <span>
             桌人数 <NextHandTag />
           </span>
-          <span className="hint">2 / 6 / 9 人桌，默认 6 人</span>
+          <span className="hint">2 / 6 / 9 人桌，默认 6 人；继承模式下改动会重开一局</span>
         </div>
         <select
           value={settings.seatCount}
@@ -150,14 +151,14 @@ export function SettingsPanel({
           <span>
             起始筹码 <NextHandTag />
           </span>
-          <span className="hint">以 BB 计，1000 = 100BB（盲注 5/10）</span>
+          <span className="hint">以 BB 计，1000 = 100BB（盲注 5/10）；继承模式下改动会重开一局并清零本局战绩</span>
         </div>
         <input
           type="number"
           min={100}
           step={100}
           value={settings.startingStack}
-          onChange={(e) => onChange({ startingStack: Math.max(100, Number(e.target.value) || 1000) })}
+          onChange={(e) => onChange({ startingStack: clampStartingStack(Number(e.target.value)) })}
           style={{ width: 110 }}
         />
       </div>
@@ -174,7 +175,7 @@ export function SettingsPanel({
             type="number"
             min={1}
             value={settings.smallBlind}
-            onChange={(e) => onChange({ smallBlind: Math.max(1, Number(e.target.value) || 5) })}
+            onChange={(e) => onChange({ smallBlind: clampSmallBlind(Number(e.target.value)) })}
             style={{ width: 76 }}
           />
           <span className="muted">/</span>
@@ -182,7 +183,7 @@ export function SettingsPanel({
             type="number"
             min={2}
             value={settings.bigBlind}
-            onChange={(e) => onChange({ bigBlind: Math.max(2, Number(e.target.value) || 10) })}
+            onChange={(e) => onChange({ bigBlind: clampBigBlind(Number(e.target.value)) })}
             style={{ width: 76 }}
           />
         </div>

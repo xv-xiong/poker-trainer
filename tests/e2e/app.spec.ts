@@ -373,21 +373,22 @@ test.describe('开始界面与风格令牌', () => {
     await expect(page.getByRole('button', { name: '开始练习' })).toBeVisible();
     expect(await page.locator('[role="tab"]').count()).toBe(0);
 
-    // 关键信息四项：桌人数 / 盲注 / 起始筹码 / AI 难度
-    const facts = page.locator('.lobby-facts .fact');
-    await expect(facts).toHaveCount(4);
-    for (const [i, label] of ['桌人数', '盲注', '起始筹码', 'AI 难度'].entries()) {
-      await expect(facts.nth(i).locator('dt')).toHaveText(label);
-      await expect(facts.nth(i).locator('dd')).not.toBeEmpty();
-    }
-    // 无存档时展示默认值：6 人桌 / 盲注 5 / 10 / 起始筹码 1000
-    await expect(facts.nth(0).locator('dd')).toContainText('6 人');
-    await expect(facts.nth(1).locator('dd')).toContainText('5 / 10');
+    // 建桌参数四项：桌人数 / AI 难度 / 起始筹码 / 盲注（阶段 2-1 起在首屏可编辑，
+    // 故断言控件的 value 而不是只读文本——这比旧的 toContainText 更强：
+    // 文本对得上但控件没接上受控值时，旧断言会漏过）。
+    await expect(page.locator('[data-testid="lobby-setup"]')).toBeVisible();
+    await expect(page.locator('.lobby-field')).toHaveCount(4);
+    // 无存档时展示默认值：6 人桌 / 中等 / 起始筹码 1000 / 盲注 5 与 10
+    await expect(page.getByTestId('lobby-seat-count')).toHaveValue('6');
+    await expect(page.getByTestId('lobby-ai-tier')).toHaveValue('medium');
+    await expect(page.getByTestId('lobby-starting-stack')).toHaveValue('1000');
+    await expect(page.getByTestId('lobby-small-blind')).toHaveValue('5');
+    await expect(page.getByTestId('lobby-big-blind')).toHaveValue('10');
 
     // 战绩区三项
     await expect(page.locator('.lobby-record .rock')).toHaveCount(3);
     // 无存档时明确告知展示的是默认值（不假装读到了战绩）
-    await expect(page.locator('.lobby-record-note')).toContainText('本机还没有存档');
+    await expect(page.locator('.lobby-record-note')).toContainText('本机还没有战绩');
 
     // 规则要点默认折叠（内容仍在 DOM 里，故断言「不可见」而非「不存在」），
     // 点开后四条要点可见
@@ -462,11 +463,11 @@ test.describe('开始界面与风格令牌', () => {
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
 
-    const facts = page.locator('.lobby-facts .fact');
-    await expect(facts.nth(0).locator('dd')).toContainText('9 人');
-    await expect(facts.nth(1).locator('dd')).toContainText('10 / 20');
-    await expect(facts.nth(2).locator('dd')).toContainText('2000');
-    await expect(facts.nth(3).locator('dd')).toContainText('困难');
+    await expect(page.getByTestId('lobby-seat-count')).toHaveValue('9');
+    await expect(page.getByTestId('lobby-ai-tier')).toHaveValue('hard');
+    await expect(page.getByTestId('lobby-starting-stack')).toHaveValue('2000');
+    await expect(page.getByTestId('lobby-small-blind')).toHaveValue('10');
+    await expect(page.getByTestId('lobby-big-blind')).toHaveValue('20');
 
     const rocks = page.locator('.lobby-record .rock');
     await expect(rocks.nth(0).locator('.rv')).toHaveText('42'); // 已打手数
@@ -583,7 +584,7 @@ test.describe('开始界面与风格令牌', () => {
     await page.goto('/poker-trainer/');
 
     await expect(page.getByRole('heading', { name: /先想清楚/ })).toBeVisible();
-    await expect(page.locator('.lobby-facts .fact')).toHaveCount(4);
+    await expect(page.locator('.lobby-field')).toHaveCount(4);
 
     // 按钮必须落在视口内（不能被横向溢出挤到看不见）
     const box = await page.getByRole('button', { name: '开始练习' }).boundingBox();
