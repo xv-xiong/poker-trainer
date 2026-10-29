@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { CardView } from './CardView.js';
 import { makeCard } from '../../core/cards.js';
 import { AI_TIER_LABELS, defaultSettings, emptyStats, type AITier } from '../../core/types.js';
-import { STORAGE_KEYS } from '../../store/schema.js';
+import { STORAGE_KEYS, type Pace } from '../../store/schema.js';
 
 /** 开始界面展示所需的只读概要（settings + 战绩，全部有默认值）。 */
 interface LobbySummary {
@@ -103,7 +103,28 @@ const RULE_HIGHLIGHTS: { title: string; desc: string }[] = [
   { title: '全部本地运行', desc: '战绩存在浏览器本地，不联网、不注册、不上传' },
 ];
 
-export function StartScreen({ onStart }: { onStart: () => void }) {
+/**
+ * 节奏档位选项（与 store/schema 的 Pace 一一对应）。
+ *
+ * 放在首屏是「选项 C」的取舍：默认仍是拟真（每次 > 1 秒，不违背
+ * 「AI 不该秒出」这条原始要求），但想提升练习吞吐的人不必先翻设置。
+ */
+const PACE_OPTIONS: { value: Pace; label: string }[] = [
+  { value: 'realistic', label: '拟真' },
+  { value: 'fast', label: '快速' },
+  { value: 'instant', label: '瞬时' },
+];
+
+export function StartScreen({
+  onStart,
+  pace,
+  onPaceChange,
+}: {
+  onStart: () => void;
+  /** 节奏档位（阶段二 P1-1）。 */
+  pace: Pace;
+  onPaceChange: (p: Pace) => void;
+}) {
   const [summary] = useState<LobbySummary>(readSummary);
   const [rulesOpen, setRulesOpen] = useState(false);
 
@@ -199,6 +220,25 @@ export function StartScreen({ onStart }: { onStart: () => void }) {
           {summary.hasSave
             ? '以上战绩读自本机浏览器存档，开始后可随时在「统计 / 历史」查看。'
             : '本机还没有存档，以上为默认值；打完第一手后会开始记录。'}
+        </p>
+
+        <div className="lobby-pace" role="group" aria-label="AI 思考节奏">
+          <span className="lobby-pace-label">节奏</span>
+          {PACE_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              data-testid={`pace-${o.value}`}
+              aria-pressed={pace === o.value}
+              className={`lobby-pace-btn${pace === o.value ? ' active' : ''}`}
+              onClick={() => onPaceChange(o.value)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="muted small lobby-pace-note">
+          只影响 AI 每步等多久，不改变它的决策；进入后也能在「设置」里改。
         </p>
 
         <button className="primary lobby-start" onClick={onStart}>

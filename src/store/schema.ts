@@ -14,8 +14,40 @@ import { defaultSettings, emptyStats } from '../core/types.js';
  * v1 → v2（阶段 1-1「筹码继承」）：新增三个字段
  * `carryOverStacks` / `roster` / `heroOut`。它们都是**增量**字段，
  * 旧数据补默认值即可，不改变任何既有字段的语义，因此迁移函数只做填充。
+ *
+ * 阶段二（节奏档位）又新增了 `pace`，但**刻意不递增版本号**：它是可选字段 +
+ * 读盘时缺省（`migrateState` 尾部统一规整），不构成破坏性变更，
+ * 旧存档无需迁移、新代码读旧档也不会失败。递增版本号反而会让所有旧存档
+ * 走一次没有必要的迁移提示。
  */
 export const SCHEMA_VERSION = 2;
+
+/**
+ * 节奏档位：AI 每步思考多久（阶段二 P1-1）。
+ *
+ * 为什么这个类型定义在 store 而不是 ui：它是**用户设置**，要落盘、要跨会话保留，
+ * 属于持久化层的形状。`src/ui/thinkTiming.ts` 只 `import type` 它来决定时长区间，
+ * 反向依赖（store 依赖 ui）会破坏分层。
+ *
+ * 三个取值只影响「等多久」，不影响 AI 决策：决策只读 `HandState` 与 RNG，
+ * 从不读这个字段（有单测用「同一 seed 三档跑出的动作序列逐条相同」守着）。
+ */
+export type Pace = 'realistic' | 'fast' | 'instant';
+
+/** 默认档位。见 docs/优化路线图.md 阶段二的「开工前拍板」：默认保留拟真。 */
+export const DEFAULT_PACE: Pace = 'realistic';
+
+/**
+ * 把任意值规整成合法档位。
+ *
+ * 为什么**不**把非法 pace 判成「存档损坏」：pace 是纯展示字段，判损坏会走
+ * 「归档 + 重置」，把用户的资金、统计、历史一起丢掉——为一个小字段毁掉真数据，
+ * 正是当初拒绝给 `bigBlind >= smallBlind` 加校验的同一个理由。
+ * 因此读盘时静默回退到默认档（见 migrateState 的尾部规整）。
+ */
+export function normalizePace(raw: unknown): Pace {
+  return raw === 'realistic' || raw === 'fast' || raw === 'instant' ? raw : DEFAULT_PACE;
+}
 
 export const STORAGE_KEYS = {
   state: 'poker-trainer:state',
@@ -78,6 +110,13 @@ export interface PersistedState {
   roster: RosterSeat[];
   /** 玩家已输光且选择「不补码」→ 本局以玩家出局告终。 */
   heroOut: boolean;
+  /**
+   * 节奏档位（只影响 AI 每步等待多久，不影响决策）。
+   *
+   * 类型上非可选，但**读盘时可能缺失**：旧存档没有这个字段，由 `migrateState`
+   * 尾部统一补默认值，因此 `loadAll` 之后它必然合法。
+   */
+  pace: Pace;
 }
 
 /** 构造一副全新的 AI 座位账本（全部为满筹码、未下桌）。 */
@@ -101,6 +140,7 @@ export function initialState(settings?: Partial<Settings>): PersistedState {
     carryOverStacks: false,
     roster: [],
     heroOut: false,
+    pace: DEFAULT_PACE,
   };
 }
 
@@ -237,7 +277,15 @@ export const MIGRATIONS: Record<number, Migration> = {
   }),
 };
 
-/** 把任意版本的状态迁移到当前版本。失败返回 null。 */
+/**
+ * 把任意版本的状态迁移到当前版本。失败返回 null。
+ *
+ * 尾部对 `pace` 做**无条件规整**（不是迁移步骤）：`pace` 是阶段二新增的可选字段，
+ * 既可能出现在「v1 迁移上来」的数据里，也可能出现在「手工改过 / 更早期 v2 存档」
+ * 里。放在这里的好处是**只有一个收敛点**——`loadAll` 无论走哪条分支都要经过
+ * `migrateState`，因此下游（controller / snapshot）拿到的 `pace` 必然合法，
+ * 不需要每个读取点各自兜底。
+ */
 export function migrateState(raw: Record<string, unknown>): Record<string, unknown> | null {
   let cur = raw;
   let guard = 0;
@@ -249,7 +297,7 @@ export function migrateState(raw: Record<string, unknown>): Record<string, unkno
     if (!next) return null;
     cur = next;
   }
-  return cur;
+  return { ...cur, pace: normalizePace(cur.pace) };
 }
 
 /** 构造一条历史记录。 */

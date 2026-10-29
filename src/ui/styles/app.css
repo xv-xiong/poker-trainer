@@ -355,6 +355,52 @@ select:focus {
   margin: 12px 0 18px;
 }
 
+/* 节奏档位（阶段二 P1-1）：首屏的分段控件。
+   放在「开始练习」正上方，因为它改变的是「接下来这一局的手感」，
+   属于上桌前最后一次可调的东西。 */
+.lobby-pace {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+
+.lobby-pace-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.lobby-pace-btn {
+  flex: 1 1 0;
+  padding: 7px 10px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.lobby-pace-btn:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+/* 选中态沿用「决策金」：它标记的是用户此刻的选择，与牌桌上的操作高亮同源 */
+.lobby-pace-btn.active {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(231, 193, 131, 0.08);
+}
+
+.lobby-pace-note {
+  margin: 0 0 14px;
+}
+
 .lobby-start {
   width: 100%;
   padding: 13px 18px;

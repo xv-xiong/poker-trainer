@@ -13,7 +13,7 @@ import { computeEquity, potOdds, AI_ITERATIONS } from '../core/equity/index.js';
 import { createRng } from '../core/rng.js';
 import { appendHistory, buildRoster } from '../store/schema.js';
 import { loadAll, saveState, saveHistory, type StorageLike } from '../store/persistence.js';
-import type { PersistedState, RosterSeat, SessionEndKind } from '../store/schema.js';
+import type { PersistedState, Pace, RosterSeat, SessionEndKind } from '../store/schema.js';
 import type {
   ActionType,
   HandRecord,
@@ -75,6 +75,8 @@ export interface ControllerSnapshot {
   pendingBusts: PendingBust[];
   /** 本局结局；null 表示仍在进行中。 */
   sessionEnd: SessionEnd | null;
+  /** 节奏档位（只影响 AI 每步等待多久，不影响决策）。 */
+  pace: Pace;
 }
 
 type Listener = (s: ControllerSnapshot) => void;
@@ -208,6 +210,7 @@ export class GameController {
       roster: this.persisted.roster,
       pendingBusts: pendingBustsOf(this.persisted),
       sessionEnd: sessionEndOf(this.persisted),
+      pace: this.persisted.pace,
     };
   }
 
@@ -247,6 +250,23 @@ export class GameController {
 
   updateSettings(patch: Partial<Settings>): void {
     this.persisted.settings = { ...this.persisted.settings, ...patch };
+    this.persistState();
+    this.emit();
+  }
+
+  /**
+   * 切换节奏档位（阶段二 P1-1）。
+   *
+   * 与 `updateSettings` 分开是因为 `pace` **不在** `Settings` 里：`Settings` 定义在
+   * 冻结的 `src/core/types.ts`，不能加字段；它落在 `PersistedState`。
+   *
+   * 与其它设置项不同，档位**立即生效**（不用等下一手）：它只改「等多久」，
+   * 不参与任何规则计算，因此不会让进行中的手牌出现「规则中途变了」的问题。
+   * 这也是设置面板里唯一不挂「下一手生效」标签的项。
+   */
+  setPace(pace: Pace): void {
+    if (this.persisted.pace === pace) return;
+    this.persisted.pace = pace;
     this.persistState();
     this.emit();
   }

@@ -55,7 +55,7 @@ export interface ShowcaseTiming {
    * AI / 发牌的「思考」停顿基线：此期间座位高亮、显示思考气泡。
    *
    * **注意**：`ai-action` 步的实际等待时长不取本值，而是在
-   * `src/ui/thinkTiming.ts` 的 `AI_THINK_RANGE`（1100–2400ms）内按
+   * `src/ui/thinkTiming.ts` 的 `AI_THINK_RANGES[pace]` 内按
    * (seed, revision, seat) 哈希抽样（见 `aiThinkDelayMs`）。本字段在这里只剩
    * 两个作用：① 作为「是否启用等待」的开关（`0` = reduced-motion，等待归零）；
    * ② 供 `planShowcaseStep` 的纯函数单测保持一个确定的基线值。
@@ -644,13 +644,16 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
         kind: step.kind,
         seat: 'seat' in step ? step.seat : -1,
         baseMs: timing.thinkMs,
+        // 档位只决定「用哪个区间」，不参与决策；换档位后同一步会换一个时长，
+        // 因此必须进依赖数组（否则切到「瞬时」后当前这步仍按旧档等完）。
+        pace: snap.pace,
         seed: st?.seed ?? 0,
         revision: snap.revision,
       }),
     // stepKey 已涵盖 kind / seat / revision / 揭示游标 / settleHold，用它做依赖即可；
     // st 是原地修改的对象，引用不变，不能进依赖数组。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stepKey, timing.thinkMs, st?.seed],
+    [stepKey, timing.thinkMs, st?.seed, snap.pace],
   );
 
   // step 的身份只随调度键变化；delayMs 每次读取最新值，不参与身份计算。

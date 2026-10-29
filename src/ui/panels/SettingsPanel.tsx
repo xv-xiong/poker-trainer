@@ -9,7 +9,7 @@
  */
 
 import { AI_TIER_LABELS, type AITier, type Settings } from '../../core/types.js';
-import type { RosterSeat } from '../../store/schema.js';
+import type { Pace, RosterSeat } from '../../store/schema.js';
 
 /** 生效时机标签：这些项只在开新一手时读取。 */
 function NextHandTag() {
@@ -24,6 +24,8 @@ export function SettingsPanel({
   carryOverStacks,
   onCarryOverChange,
   roster,
+  pace,
+  onPaceChange,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
@@ -35,6 +37,9 @@ export function SettingsPanel({
   onCarryOverChange: (on: boolean) => void;
   /** 继承模式下的 AI 账本（空数组表示尚未开局）。 */
   roster: RosterSeat[];
+  /** 节奏档位（阶段二 P1-1）：只影响 AI 每步等待多久，不影响决策。 */
+  pace: Pace;
+  onPaceChange: (p: Pace) => void;
 }) {
   return (
     <div className="panel">
@@ -43,7 +48,7 @@ export function SettingsPanel({
       <p className="panel-note">
         带「下一手生效」标记的项只影响之后新开的手牌
         {handInProgress ? '——本手正在进行中，改动不会改变当前这一手' : ''}。
-        四色牌与快捷键提示立即生效。
+        四色牌、快捷键提示与 AI 思考节奏立即生效。
       </p>
 
       {/* 继承模式开关放在最上面：它决定下面「起始筹码」的含义——
@@ -117,6 +122,29 @@ export function SettingsPanel({
         </select>
       </div>
 
+      {/* 节奏档位（审计 P1-1）。它是本面板唯一「立即生效」的行为项：
+          只改每步等多久，不参与任何规则计算，因此不会让进行中的手牌
+          「规则中途变了」——这也是它不挂「下一手生效」标签的原因。 */}
+      <div className="settings-row">
+        <div className="label">
+          <span>AI 思考节奏</span>
+          <span className="hint">
+            只影响每步等待多久，不改变 AI 的决策；立即生效。拟真档每次 1.1–1.8 秒，
+            快速档 0.35–0.6 秒，瞬时档不等待。按住 S 可临时跳过当前等待。
+          </span>
+        </div>
+        <select
+          data-testid="pace-select"
+          aria-label="AI 思考节奏"
+          value={pace}
+          onChange={(e) => onPaceChange(e.target.value as Pace)}
+        >
+          <option value="realistic">拟真（1.1–1.8 秒）</option>
+          <option value="fast">快速（0.35–0.6 秒）</option>
+          <option value="instant">瞬时（不等待）</option>
+        </select>
+      </div>
+
       <div className="settings-row">
         <div className="label">
           <span>
@@ -177,7 +205,7 @@ export function SettingsPanel({
       <div className="settings-row">
         <div className="label">
           <span>显示快捷键提示</span>
-          <span className="hint">F 弃牌 / C 跟注 / R 加注 / Space 确认</span>
+          <span className="hint">F 弃牌 / C 跟注 / R 加注 / Space 确认 / 长按 S 跳过等待</span>
         </div>
         <input
           type="checkbox"

@@ -109,11 +109,74 @@ export function App() {
 
   // 唯一的推进定时器：只执行「当前该执行的一步」，执行完由下一次 revision 驱动下一步。
   // 依赖含 table.step（其身份已把揭示游标计入），否则翻牌会只翻第一张就卡住。
+  //
+  // 长按 S 跳过等待（阶段二 P1-1）需要两条路径，缺一不可：
+  //   ① 当前这一步**已经**排了定时器 → 立刻清掉并就地执行（否则还得等这一档走完）；
+  //   ② 之后排的每一步 → 用 0 延迟排期（否则长按只跳一步，剩下的照旧等）。
+  // 两条路径都只压缩「等待」：`table.run` 仍被调用恰好一次，AI 的动作序列与档位无关
+  // （单测守着「同一 seed 三档跑出的动作序列逐条相同」）。
+  const skipWaitRef = useRef(false);
+  const stepTimerRef = useRef<number | null>(null);
+  const fireStepRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
-    if (table.step.kind === 'idle') return;
-    const t = setTimeout(() => table.run(table.step), Math.max(0, table.step.delayMs));
-    return () => clearTimeout(t);
+    if (table.step.kind === 'idle') {
+      fireStepRef.current = null;
+      return;
+    }
+    const fire = () => table.run(table.step);
+    fireStepRef.current = fire;
+    const delay = skipWaitRef.current ? 0 : Math.max(0, table.step.delayMs);
+    const t = window.setTimeout(() => {
+      stepTimerRef.current = null;
+      fireStepRef.current = null;
+      fire();
+    }, delay);
+    stepTimerRef.current = t;
+    return () => {
+      window.clearTimeout(t);
+      if (stepTimerRef.current === t) stepTimerRef.current = null;
+    };
   }, [snap.revision, table.step, table.run]);
+
+  /**
+   * 长按 S 跳过当前等待。
+   *
+   * 为什么要 keyup + blur 两个收尾：切走窗口 / 切标签页时收不到 keyup，
+   * 只靠 keyup 会让 `skipWaitRef` 永久停在 true（之后每一手都瞬发）。
+   */
+  useEffect(() => {
+    const isTyping = (target: EventTarget | null): boolean => {
+      const el = target as HTMLElement | null;
+      return Boolean(el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+    };
+    const onDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 's' || e.repeat || isTyping(e.target)) return;
+      skipWaitRef.current = true;
+      const pending = stepTimerRef.current;
+      const fire = fireStepRef.current;
+      if (pending !== null && fire) {
+        window.clearTimeout(pending);
+        stepTimerRef.current = null;
+        fireStepRef.current = null;
+        fire();
+      }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 's') skipWaitRef.current = false;
+    };
+    const onBlur = () => {
+      skipWaitRef.current = false;
+    };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
 
   // 玩家回合开始时记录起始时间（用于思考耗时）
   useEffect(() => {
@@ -282,7 +345,11 @@ export function App() {
   if (!entered) {
     return (
       <div className={`app ${snap.settings.fourColorDeck ? '' : 'two-color'}`}>
-        <StartScreen onStart={() => setEntered(true)} />
+        <StartScreen
+          onStart={() => setEntered(true)}
+          pace={snap.pace}
+          onPaceChange={(p) => controller.setPace(p)}
+        />
       </div>
     );
   }
@@ -547,6 +614,8 @@ export function App() {
             carryOverStacks={snap.carryOverStacks}
             onCarryOverChange={(on) => controller.setCarryOverStacks(on)}
             roster={snap.roster}
+            pace={snap.pace}
+            onPaceChange={(p) => controller.setPace(p)}
           />
         </div>
       )}

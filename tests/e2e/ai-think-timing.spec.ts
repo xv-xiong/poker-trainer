@@ -53,9 +53,21 @@ interface ThinkSample {
   action: string;
 }
 
-/** 进入牌桌（沿用 showcase.spec.ts 的 skip-lobby 入口，不依赖开始界面文案）。 */
+/**
+ * 进入牌桌，并**显式**切到「拟真」档（阶段二 P1-1 之后节奏有三档）。
+ *
+ * 为什么不用 `?skip-lobby=1`：那条入口会沿用当前存档里的档位。若用户（或某个
+ * 之前的用例）把档位改成了「快速 / 瞬时」，这里断言的「每次 ≥ 1000ms」就会假红，
+ * 而产品其实没错。所以本用例从首屏进入并主动按下「拟真」，把前置条件写死。
+ * 顺带也就覆盖了首屏档位控件本身可用。
+ */
 async function enterTable(page: Page): Promise<void> {
-  await page.goto('/poker-trainer/?skip-lobby=1');
+  await page.goto('/poker-trainer/');
+  const realistic = page.locator('[data-testid="pace-realistic"]');
+  await realistic.waitFor({ state: 'visible', timeout: 30_000 });
+  await realistic.click();
+  await expect(realistic).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('button.lobby-start').click();
   await page.waitForSelector('[data-testid="felt"]', { timeout: 30_000 });
 }
 
