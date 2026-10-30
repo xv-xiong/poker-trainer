@@ -1,0 +1,200 @@
+/* ============================================================
+ * 基础层：文件头说明、通用控件（button / input / select）、布局骨架（.app / .game-stage / 顶栏）。
+ *
+ * 本文件是阶段四从 app.css 拆出来的；加载顺序与拆分前的书写顺序一致，
+ * 因此层叠结果与拆分前完全相同（拆分脚本做过逐字符拼接比对）。
+ * ============================================================ */
+
+/* ============================================================
+   组件样式：全部取值来自 tokens.css（风格令牌层）。
+   ------------------------------------------------------------
+   视觉基线：参考站实测风格（深绿底 + 金色主色 + 绿绒牌桌 +
+   米白扑克牌）。令牌定义见 ./tokens.css，本文件只做「谁用哪个令牌」。
+   牌面四色方案：黑桃黑 / 红桃红 / 方块蓝 / 梅花绿（可切传统两色）。
+   ============================================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-0);
+  color: var(--fg-0);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ---------- 通用控件（button / input / select） ---------- */
+
+button {
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-2);
+  color: var(--fg-0);
+  border-radius: var(--radius);
+  padding: 10px 15px;
+  font-size: 13px;
+  transition: background var(--t-btn), transform var(--t-btn), box-shadow var(--t-btn),
+    border-color var(--t-btn);
+}
+
+button:hover:not(:disabled) {
+  background: var(--bg-3);
+}
+
+/* 按压缩放：给点击一个「按下去」的触觉反馈（参考站 motion 同款） */
+button:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--gold-text);
+  font-weight: 750;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--gold);
+  box-shadow: 0 4px 18px rgba(231, 193, 131, 0.15);
+}
+
+button.danger {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+button.ghost {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--fg-1);
+}
+
+button.ghost:hover:not(:disabled) {
+  background: var(--bg-2);
+}
+
+input,
+select {
+  font: inherit;
+  background: var(--bg-1);
+  color: var(--fg-0);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+/* ---------- 布局骨架 ---------- */
+
+.app {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 0 20px 48px;
+  /* 整页纵向布局：顶栏固定在上，游戏区吃掉剩余高度并在其中垂直居中
+     （见 .game-stage）。min-height 而不是 height，内容超长时页面照常滚动。 */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  min-height: var(--header-h);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.brand h1 {
+  font-size: 19px;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.brand .sub {
+  color: var(--fg-2);
+  font-size: 12.5px;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+.tab:hover:not(:disabled) {
+  background: transparent;
+  color: var(--fg-0);
+}
+
+.tab.active {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: inset 0 -2px 0 var(--gold);
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.bankroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-num);
+  font-variant-numeric: var(--mono-tabular);
+}
+
+.bankroll .amount {
+  font-size: 19px;
+  font-weight: 650;
+  color: var(--gold);
+}
+
+.bankroll .delta.up {
+  color: var(--win);
+}
+.bankroll .delta.down {
+  color: var(--danger);
+}
+

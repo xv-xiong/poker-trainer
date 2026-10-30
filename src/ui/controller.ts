@@ -65,8 +65,6 @@ export interface ControllerSnapshot {
   hint: { equity: number; potOdds: number; source: string; action: string } | null;
   /** 界面提示消息（如数据迁移通知）。 */
   notices: string[];
-  /** AI 是否正在思考。 */
-  aiThinking: boolean;
   /** 是否继承上一手筹码。 */
   carryOverStacks: boolean;
   /** 继承模式下的 AI 座位账本（含已下桌者，供半透明展示）。 */
@@ -150,7 +148,6 @@ export class GameController {
   private lastRecord: HandRecord | null = null;
   private hint: ControllerSnapshot['hint'] = null;
   private notices: string[] = [];
-  private aiThinking = false;
   private listeners = new Set<Listener>();
   private revision = 0;
   /** 已提示过的存储写入失败种类（去重，避免配额耗尽时每手刷一条提示）。 */
@@ -205,7 +202,6 @@ export class GameController {
       lastRecord: this.lastRecord,
       hint: this.hint,
       notices: this.notices,
-      aiThinking: this.aiThinking,
       carryOverStacks: this.persisted.carryOverStacks,
       roster: this.persisted.roster,
       pendingBusts: pendingBustsOf(this.persisted),
@@ -615,6 +611,10 @@ export class GameController {
    *
    * 关键：必须 emit 让 React 重渲染（state 是原地修改，引用不变）。
    * 返回本手是否已结束，便于调用方决定是否立即进入下一手。
+   *
+   * @internal 生产路径不再调用它——界面用 `stepAiAction()` 一次推一名 AI 做分步演出。
+   * 保留它是为了给「拆步 vs 一次跑完」的同构性测试当参照实现（`tests/unit/showcase.test.ts`
+   * 逐字节比对两条路径产出的动作序列）；删掉会丢掉这条关键回归。
    */
   runAI(): boolean {
     if (!this.state) return false;
@@ -622,9 +622,6 @@ export class GameController {
       this.emit();
       return true;
     }
-    this.aiThinking = true;
-    this.emit();
-
     let guard = 0;
     while (this.state && !this.state.finished && this.state.actingSeat >= 0 && guard++ < 500) {
       const seat = this.state.actingSeat;
@@ -644,7 +641,6 @@ export class GameController {
       }
     }
 
-    this.aiThinking = false;
     const finished = Boolean(this.state?.finished);
     if (finished) this.finalizeHand();
     this.emit();

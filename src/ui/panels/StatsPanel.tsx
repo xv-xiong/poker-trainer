@@ -77,8 +77,8 @@ export function StatsPanel({
           <span>入池率 VPIP</span>
           <span className="hint">主动投钱进池的手数占比</span>
         </div>
-        <div style={{ minWidth: 190 }}>
-          <div className="kv num" style={{ textAlign: 'right', fontFamily: 'var(--font-num)' }}>
+        <div className="stat-meter">
+          <div className="kv num stat-meter-value">
             {vpip.toFixed(1)}%
           </div>
           <div className="bar">
@@ -92,8 +92,8 @@ export function StatsPanel({
           <span>翻牌前加注率 PFR</span>
           <span className="hint">翻牌前主动加注的手数占比</span>
         </div>
-        <div style={{ minWidth: 190 }}>
-          <div style={{ textAlign: 'right', fontFamily: 'var(--font-num)' }}>{pfr.toFixed(1)}%</div>
+        <div className="stat-meter">
+          <div className="stat-meter-value">{pfr.toFixed(1)}%</div>
           <div className="bar">
             <span style={{ width: `${Math.min(100, pfr)}%` }} />
           </div>
@@ -105,8 +105,8 @@ export function StatsPanel({
           <span>看到摊牌的比率 WTSD</span>
           <span className="hint">打到摊牌的手数占比</span>
         </div>
-        <div style={{ minWidth: 190 }}>
-          <div style={{ textAlign: 'right', fontFamily: 'var(--font-num)' }}>{wtsd.toFixed(1)}%</div>
+        <div className="stat-meter">
+          <div className="stat-meter-value">{wtsd.toFixed(1)}%</div>
           <div className="bar">
             <span style={{ width: `${Math.min(100, wtsd)}%` }} />
           </div>
@@ -123,8 +123,8 @@ export function StatsPanel({
               <span>正常决策占比</span>
               <span className="hint">共 {totalDecisions} 个决策点</span>
             </div>
-            <div style={{ minWidth: 190 }}>
-              <div style={{ textAlign: 'right', fontFamily: 'var(--font-num)' }}>
+            <div className="stat-meter">
+              <div className="stat-meter-value">
                 {okRate.toFixed(1)}%
               </div>
               <div className="bar">
@@ -133,14 +133,14 @@ export function StatsPanel({
             </div>
           </div>
 
-          <div className="stats-grid" style={{ marginTop: 12 }}>
+          <div className="stats-grid stats-grid-tight">
             <div className="stat">
               <div className="k">正常</div>
               <div className="v pos">{stats.reviewCounts.ok}</div>
             </div>
             <div className="stat">
               <div className="k">值得复盘</div>
-              <div className="v" style={{ color: 'var(--warn)' }}>
+              <div className="v v-warn">
                 {stats.reviewCounts.review}
               </div>
             </div>

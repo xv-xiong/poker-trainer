@@ -2,7 +2,14 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/App.js';
 import { ErrorBoundary } from './ui/ErrorBoundary.js';
-import './ui/styles/app.css';
+// 样式按层叠顺序引入：后加载的覆盖先加载的，顺序不能调换。
+// 阶段四把原来的 app.css（1784 行）按这个顺序拆成 6 个文件，内容零改动。
+import './ui/styles/base.css';
+import './ui/styles/lobby.css';
+import './ui/styles/table.css';
+import './ui/styles/actions.css';
+import './ui/styles/panels.css';
+import './ui/styles/responsive.css';
 
 const el = document.getElementById('root');
 if (!el) throw new Error('找不到 #root 挂载点');

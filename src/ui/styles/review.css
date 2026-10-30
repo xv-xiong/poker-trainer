@@ -1,9 +1,9 @@
 /**
  * 复盘面板专用样式（由 ReviewPanel.tsx 直接 import）。
  *
- * 为什么单独成文件：styles/app.css 是全局布局文件，复盘面板的
+ * 为什么单独成文件：styles/ 下的全局布局文件已经很大，复盘面板的
  * 「宽屏表格 / 窄屏卡片」切换和 BB 副标签只服务这一个面板，
- * 放一起会让 app.css 继续膨胀（评估报告 P2：单文件 1428 行）。
+ * 放一起会让全局布局文件继续膨胀（评估报告 P2：单文件 1428 行）。
  * 项目已有先例：components/ActionBubble.tsx 同样直接 import showcase.css。
  */
 

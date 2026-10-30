@@ -14,6 +14,10 @@
  *   - 全部用原生 button，天然支持 Tab / Enter / Space 键盘操作。
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+
+// 兜底界面的样式独立成文件：这个组件要在「全局样式可能没生效」的前提下
+// 也能读，所以它不依赖 tokens.css 的变量（详见该 CSS 的头部说明）。
+import './styles/errorboundary.css';
 import { STORAGE_KEYS } from '../store/schema.js';
 
 interface ErrorBoundaryProps {
@@ -127,65 +131,28 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
     const stack = error.stack ?? '';
     return (
-      <div
-        role="alert"
-        aria-live="assertive"
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '24px',
-          background: '#0f172a',
-          color: '#e5e7eb',
-          fontFamily: 'system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif',
-        }}
-      >
-        <div
-          style={{
-            maxWidth: '720px',
-            width: '100%',
-            background: '#111827',
-            border: '1px solid #334155',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.45)',
-          }}
-        >
-          <h2 style={{ margin: '0 0 8px', fontSize: '20px' }}>页面遇到异常，但没有白屏</h2>
-          <p style={{ margin: '0 0 12px', color: '#94a3b8', lineHeight: 1.6 }}>
+      <div role="alert" aria-live="assertive" className="eb-root">
+        <div className="eb-card">
+          <h2 className="eb-title">页面遇到异常，但没有白屏</h2>
+          <p className="eb-lede">
             界面渲染时发生了未捕获的错误。你的对局进度已保存在本机，可以先导出存档备份，
             再选择重新发牌继续练习。
           </p>
 
-          <pre
-            style={{
-              margin: '0 0 16px',
-              padding: '12px',
-              maxHeight: '180px',
-              overflow: 'auto',
-              background: '#0b1220',
-              border: '1px solid #1e293b',
-              borderRadius: '8px',
-              color: '#fca5a5',
-              fontSize: '13px',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}
-          >
+          <pre className="eb-error">
             {error.message}
           </pre>
 
           {stack ? (
-            <details style={{ margin: '0 0 16px', color: '#94a3b8', fontSize: '12px' }}>
-              <summary style={{ cursor: 'pointer' }}>查看错误堆栈（便于反馈问题）</summary>
-              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: '8px' }}>
+            <details className="eb-details">
+              <summary className="eb-summary">查看错误堆栈（便于反馈问题）</summary>
+              <pre className="eb-stack">
                 {stack}
               </pre>
             </details>
           ) : null}
 
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="eb-actions">
             <button type="button" className="primary" onClick={this.handleReload}>
               重新发牌
             </button>
@@ -197,7 +164,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             </button>
           </div>
 
-          <p style={{ margin: '14px 0 0', color: '#64748b', fontSize: '12px', lineHeight: 1.6 }}>
+          <p className="eb-foot">
             「导出存档」会把本机的对局状态与历史记录下载为 JSON；「清空存档」会删除这两项后
             重新加载（归档数据保留）。也可以直接按 F5 / Ctrl+R 刷新重试。
           </p>

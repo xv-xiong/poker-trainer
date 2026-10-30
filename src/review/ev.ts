@@ -247,9 +247,3 @@ export function buildReview(
   return out;
 }
 
-/** 汇总复盘结果的分级计数。 */
-export function countGrades(entries: readonly ReviewEntry[]): { ok: number; review: number; major: number } {
-  const c = { ok: 0, review: 0, major: 0 };
-  for (const e of entries) c[e.grade]++;
-  return c;
-}

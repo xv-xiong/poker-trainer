@@ -1,0 +1,330 @@
+/* ============================================================
+ * 面板通用与数据可视化：.panel、统计/复盘/历史/设置面板、进度条与表格。
+ *
+ * 本文件是阶段四从 app.css 拆出来的；加载顺序与拆分前的书写顺序一致，
+ * 因此层叠结果与拆分前完全相同（拆分脚本做过逐字符拼接比对）。
+ * ============================================================ */
+
+/* ---------- 数据可视化 ---------- */
+
+.bar {
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-3);
+  overflow: hidden;
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--gold);
+  transition: width 0.25s ease;
+}
+
+.bar.warn > span {
+  background: var(--warn);
+}
+
+.bar.danger > span {
+  background: var(--danger);
+}
+
+/* ---------- 面板通用 ---------- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
+/* 开始界面右栏卡片需要更厚的竖向留白 */
+.panel-wide {
+  padding: 28px 26px;
+}
+
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 17px;
+}
+
+.panel h3 {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  color: var(--fg-1);
+}
+
+.notice {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: #ffd98a;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.stat {
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 11px 12px;
+}
+
+.stat .k {
+  font-size: 11.5px;
+  color: var(--fg-2);
+  letter-spacing: 0.03em;
+}
+
+.stat .v {
+  font-family: var(--font-num);
+  font-size: 21px;
+  font-weight: 650;
+  font-variant-numeric: var(--mono-tabular);
+  margin-top: 3px;
+}
+
+.stat .v.pos {
+  color: var(--win);
+}
+.stat .v.neg {
+  color: var(--danger);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+th {
+  color: var(--fg-2);
+  font-weight: 600;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+td.num {
+  font-family: var(--font-num);
+  font-variant-numeric: var(--mono-tabular);
+}
+
+tr.grade-review td {
+  background: var(--warn-soft);
+}
+
+tr.grade-major td {
+  background: var(--danger-soft);
+}
+
+.tag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-soft);
+  color: var(--fg-1);
+}
+
+.tag.ok {
+  border-color: var(--gold-dim);
+  color: var(--gold);
+}
+.tag.review {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.tag.major {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* 「下一手生效」标签：比普通 tag 更弱（它是说明性的，不该抢视觉重心） */
+.tag.next-hand {
+  font-size: 10px;
+  padding: 0 6px;
+  border-color: var(--line-soft);
+  color: var(--fg-2);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/* 面板顶部的说明文字（设置页用来说明生效时机） */
+.panel-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--fg-2);
+}
+
+.empty {
+  color: var(--fg-2);
+  font-size: 13.5px;
+  padding: 18px 0;
+  text-align: center;
+}
+
+/* 结算分配明细表：主池 / 边池 / 未跟注退还 */
+.settlement-table {
+  margin-top: 4px;
+}
+
+.settlement-table td,
+.settlement-table th {
+  padding: 6px 9px;
+}
+
+.settlement-table td:first-child {
+  width: 130px;
+}
+
+.settlement-table td:nth-child(2) {
+  width: 90px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.settings-row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--gold);
+  padding: 0;
+}
+
+/* 牌面组：卡片必须相邻排列。
+   注意：若把 CardRow 直接放进 .settings-row（space-between 的 flex 容器），
+   每张牌会成为独立的 flex 子项并被均匀撑开，视觉上像散落的牌。
+   因此牌面统一包在 .card-group 内，由它保持紧凑间距。 */
+.card-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.card-group + .card-group {
+  margin-left: 10px;
+}
+
+.settings-row .label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-row .label .hint {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.muted {
+  color: var(--fg-2);
+}
+
+.small {
+  font-size: 12.5px;
+}
+
+
+/* ---------- 阶段四 4.2：组件内联样式收敛成的类 ----------
+   原则：只有「运行期才知道的值」才留在内联 style 里（进度条宽度、座位百分比坐标），
+   静态的尺寸 / 间距 / 颜色一律回到这里。这样组件只描述结构，样式只有一处真相。 */
+.stat-meter {
+  min-width: 190px;
+}
+
+.stat-meter-value {
+  text-align: right;
+  font-family: var(--font-num);
+}
+
+.stats-grid-tight {
+  margin-top: 12px;
+}
+
+/* 结算面板里「结束方式」是文字而不是数字，15px 比默认的数字字号更合适 */
+.stat .v-sm {
+  font-size: 15px;
+}
+
+/* 「值得复盘」的计数用警示色，但不要连带 .neg（那是「亏损」的语义） */
+.stat .v-warn {
+  color: var(--warn);
+}
+
+.action-row-tight {
+  margin-top: 12px;
+}
+
+.note-line {
+  margin-top: 6px;
+}
+
+/* ---------- 设置面板 ---------- */
+.settings-check {
+  width: 18px;
+  height: 18px;
+}
+
+.settings-num-sm {
+  width: 76px;
+}
+
+.settings-num-md {
+  width: 110px;
+}
+
+.settings-blind-pair {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-tips {
+  line-height: 1.9;
+  padding-left: 20px;
+}
+
+/* ---------- 历史面板 ---------- */
+.history-toolbar {
+  margin-bottom: 12px;
+}
+
+.history-summary {
+  margin-bottom: 10px;
+}
+
+.history-detail-meta {
+  margin-bottom: 6px;
+}
+
+td.num.num-hero {
+  color: var(--accent);
+}

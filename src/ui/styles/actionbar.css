@@ -12,7 +12,7 @@
 
 @media (min-width: 901px) {
   /* 提示框的定位参照物。选择器带上 .table-wrap 与 .hint-host 提高权重，
-     避免被 app.css 里 `.table-wrap > .action-panel` 的 position 覆盖。 */
+     避免被 actions.css 里 `.table-wrap > .action-panel` 的 position 覆盖。 */
   .table-wrap > .action-panel.hint-host {
     position: relative;
   }

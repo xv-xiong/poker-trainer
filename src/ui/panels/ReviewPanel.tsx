@@ -182,7 +182,7 @@ export function ReviewPanel({
         )}
       </div>
 
-      <div className="stats-grid" style={{ marginTop: 12 }}>
+      <div className="stats-grid stats-grid-tight">
         <div className="stat">
           <div className="k">本手净盈亏</div>
           <div className={`v ${record.heroNet >= 0 ? 'pos' : 'neg'}`}>
@@ -197,7 +197,7 @@ export function ReviewPanel({
         </div>
         <div className="stat">
           <div className="k">值得复盘</div>
-          <div className="v" style={{ color: 'var(--warn)' }}>
+          <div className="v v-warn">
             {gradeCount.review}
           </div>
         </div>

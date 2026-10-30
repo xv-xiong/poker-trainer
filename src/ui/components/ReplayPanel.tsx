@@ -91,7 +91,6 @@ export function ReplayPanel({ replay }: { replay: ReplayController }) {
         <TableView
           state={frame.state}
           heroSeat={record.heroSeat}
-          revealAll={false}
           view={view}
         />
       </div>

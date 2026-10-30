@@ -133,6 +133,12 @@ src/
 ├── store/           持久化 + schemaVersion 迁移 + 导出
 ├── workers/         胜率计算 Web Worker
 └── ui/              React 界面
+    ├── controller.ts      对局控制器（状态机 + 订阅/快照，纯 TS 无 JSX）
+    ├── showcasePlan.ts    演出编排纯函数层（步进规划 / 游标数学 / 视图派生）
+    ├── useTableShowcase.ts 演出调度 hook（薄组合层，只负责何时推进）
+    ├── replay.ts / useReplay.ts  手牌回放（只读，不写统计）
+    └── styles/            全局样式，按层叠顺序引入：
+                           base → lobby → table → actions → panels → responsive
 tests/
 ├── unit/            单元测试
 ├── property/        属性测试（守恒、AI 档位可分辨）

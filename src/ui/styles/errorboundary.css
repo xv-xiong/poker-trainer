@@ -1,0 +1,83 @@
+/* ============================================================
+ * ErrorBoundary 的兜底界面样式（阶段四 4.2：从内联 style 收敛成类）。
+ *
+ * 为什么单独成文件、而且这里写死色值而不引用 tokens.css：
+ * 这个组件是「渲染已经炸了」时的最后一道兜底，它必须假设全局样式表
+ * 可能没加载成功（例如样式文件解析异常）。所以颜色用字面色值而不是
+ * var(--bg-0) 这类令牌，字体也自带 fallback 栈。
+ * ============================================================ */
+
+.eb-root {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #0f172a;
+  color: #e5e7eb;
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+
+.eb-card {
+  max-width: 720px;
+  width: 100%;
+  background: #111827;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+}
+
+.eb-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.eb-lede {
+  margin: 0 0 12px;
+  color: #94a3b8;
+  line-height: 1.6;
+}
+
+.eb-error {
+  margin: 0 0 16px;
+  padding: 12px;
+  max-height: 180px;
+  overflow: auto;
+  background: #0b1220;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.eb-details {
+  margin: 0 0 16px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.eb-summary {
+  cursor: pointer;
+}
+
+.eb-stack {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: 8px;
+}
+
+.eb-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.eb-foot {
+  margin: 14px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}

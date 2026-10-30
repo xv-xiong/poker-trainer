@@ -31,7 +31,7 @@ export function HistoryPanel({
     <div className="panel">
       <h2>手牌历史（Hand History）</h2>
 
-      <div className="action-row" style={{ marginBottom: 12 }}>
+      <div className="action-row history-toolbar">
         <button onClick={doExportJson} disabled={history.length === 0}>
           导出 JSON
         </button>
@@ -43,7 +43,7 @@ export function HistoryPanel({
         </button>
       </div>
 
-      <div className="muted small" style={{ marginBottom: 10 }}>
+      <div className="muted small history-summary">
         共 {history.length} 手（上限 500，超出按 FIFO 淘汰）。JSON 保留完整结构，CSV 逐决策点展开。
       </div>
 
@@ -75,7 +75,7 @@ export function HistoryPanel({
                     <td className="num">{h.handId}</td>
                     <td>{hole.map(cardToString).join(' ')}</td>
                     <td>{h.board.map(cardToString).join(' ') || '—'}</td>
-                    <td className={`num ${h.heroNet >= 0 ? '' : 'neg'}`} style={{ color: h.heroNet >= 0 ? 'var(--accent)' : 'var(--danger)' }}>
+                    <td className={`num ${h.heroNet >= 0 ? 'num-hero' : 'neg'}`}>
                       {h.heroNet >= 0 ? '+' : ''}
                       {h.heroNet}
                     </td>
@@ -103,7 +103,7 @@ export function HistoryPanel({
                   {isOpen && (
                     <tr key={`${h.handId}-detail`}>
                       <td colSpan={7}>
-                        <div className="muted small" style={{ marginBottom: 6 }}>
+                        <div className="muted small history-detail-meta">
                           种子 {h.seed} · {h.seatCount} 人桌 · 庄家座位 {h.dealerSeat} · 盲注 {h.smallBlind}/{h.bigBlind}
                         </div>
                         {h.actions.length === 0 ? (

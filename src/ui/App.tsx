@@ -424,7 +424,7 @@ export function App() {
 
       {tab === 'table' && (
         /* game-stage：把「牌桌 + 操作仪表盘 + 结算面板」作为一个整体，
-           在剩余高度里垂直居中（布局见 app.css 的 .game-stage）。
+           在剩余高度里垂直居中（布局见 styles/base.css 的 .game-stage）。
            空白区域过大时靠它把内容拉到视口中部，而不是全部堆在顶部。 */
         <div
           className={`game-stage${showResult && !showSessionEnd ? ' has-result' : ''}`}
@@ -457,7 +457,6 @@ export function App() {
               <TableView
                 state={snap.state}
                 heroSeat={controller.heroSeat}
-                revealAll={false}
                 view={table.view}
               />
               {/* 继承模式的「座位账本」：把每个 AI 的当前筹码摆在牌桌下方。
@@ -515,7 +514,7 @@ export function App() {
                     </div>
                     <div className="stat">
                       <div className="k">结束方式</div>
-                      <div className="v" style={{ fontSize: 15 }}>
+                      <div className="v v-sm">
                         {snap.state.finishReason === 'showdown' ? '摊牌（Showdown）' : '对手弃牌'}
                       </div>
                     </div>
@@ -548,7 +547,7 @@ export function App() {
                     </div>
                   )}
 
-                  <div className="action-row" style={{ marginTop: 12 }}>
+                  <div className="action-row action-row-tight">
                     <button className="primary" onClick={() => setTab('review')}>
                       查看复盘
                     </button>
@@ -586,7 +585,7 @@ export function App() {
                           ))}
                         </tbody>
                       </table>
-                      <div className="muted small" style={{ marginTop: 6 }}>
+                      <div className="muted small note-line">
                         「未跟注退还」是你自己下注后无人跟到的部分，会原样退回，不计入赢来的筹码。
                       </div>
                     </>

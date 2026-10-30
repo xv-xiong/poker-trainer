@@ -119,12 +119,10 @@ export function computePlacements(seatCount: number, heroSeat: number): SeatPlac
 export function TableView({
   state,
   heroSeat,
-  revealAll,
   view,
 }: {
   state: HandState;
   heroSeat: number;
-  revealAll: boolean;
   /** 演出视图；不传则退化为「一次性呈现」。 */
   view?: ShowcaseView;
 }) {
@@ -203,7 +201,9 @@ export function TableView({
           isActive={isActive}
           isWinner={handOver && winners.has(idx)}
           isWinnerSeat={handOver && winners.has(idx)}
-          revealCards={revealAll || (handOver && !seat.folded)}
+          // 底牌只在「本手结束且该座位未弃牌」时揭开：回放与活牌局同一规则，
+          // 不再需要一个恒为 false 的 `revealAll` 开关（已删）。
+          revealCards={handOver && !seat.folded}
           smallBlindSeat={smallBlindSeat}
           bigBlindSeat={bigBlindSeat}
           showcase={showcase}

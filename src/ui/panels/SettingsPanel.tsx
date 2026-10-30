@@ -69,7 +69,7 @@ export function SettingsPanel({
           aria-label="继承上一手筹码"
           checked={carryOverStacks}
           onChange={(e) => onCarryOverChange(e.target.checked)}
-          style={{ width: 18, height: 18 }}
+          className="settings-check"
         />
       </div>
 
@@ -159,7 +159,7 @@ export function SettingsPanel({
           step={100}
           value={settings.startingStack}
           onChange={(e) => onChange({ startingStack: clampStartingStack(Number(e.target.value)) })}
-          style={{ width: 110 }}
+          className="settings-num-md"
         />
       </div>
 
@@ -170,13 +170,13 @@ export function SettingsPanel({
           </span>
           <span className="hint">小盲 / 大盲，盲注不递增</span>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="settings-blind-pair">
           <input
             type="number"
             min={1}
             value={settings.smallBlind}
             onChange={(e) => onChange({ smallBlind: clampSmallBlind(Number(e.target.value)) })}
-            style={{ width: 76 }}
+            className="settings-num-sm"
           />
           <span className="muted">/</span>
           <input
@@ -184,7 +184,7 @@ export function SettingsPanel({
             min={2}
             value={settings.bigBlind}
             onChange={(e) => onChange({ bigBlind: clampBigBlind(Number(e.target.value)) })}
-            style={{ width: 76 }}
+            className="settings-num-sm"
           />
         </div>
       </div>
@@ -199,7 +199,7 @@ export function SettingsPanel({
           aria-label="四色牌"
           checked={settings.fourColorDeck}
           onChange={(e) => onChange({ fourColorDeck: e.target.checked })}
-          style={{ width: 18, height: 18 }}
+          className="settings-check"
         />
       </div>
 
@@ -213,7 +213,7 @@ export function SettingsPanel({
           aria-label="显示快捷键提示"
           checked={settings.showShortcuts}
           onChange={(e) => onChange({ showShortcuts: e.target.checked })}
-          style={{ width: 18, height: 18 }}
+          className="settings-check"
         />
       </div>
 
@@ -231,7 +231,7 @@ export function SettingsPanel({
           aria-label="翻牌单挑精确枚举"
           checked={settings.enableFlopExact}
           onChange={(e) => onChange({ enableFlopExact: e.target.checked })}
-          style={{ width: 18, height: 18 }}
+          className="settings-check"
         />
       </div>
 
@@ -246,7 +246,7 @@ export function SettingsPanel({
       </div>
 
       <h3>规则说明（Rules）</h3>
-      <ul className="small muted" style={{ lineHeight: 1.9, paddingLeft: 20 }}>
+      <ul className="small muted settings-tips">
         <li>无限注德州扑克（No-Limit Hold'em），无前注（ante）、无 straddle、无抽水（rake）。</li>
         <li>盲注不递增（现金局结构）。默认小盲 5 / 大盲 10，起始筹码 1000（100BB）。</li>
         <li>翻牌前行动从大盲左侧开始；翻牌后从庄家左侧第一个未弃牌玩家开始。</li>
@@ -258,7 +258,7 @@ export function SettingsPanel({
       </ul>
 
       <h3>胜率计算说明（Equity Sources）</h3>
-      <ul className="small muted" style={{ lineHeight: 1.9, paddingLeft: 20 }}>
+      <ul className="small muted settings-tips">
         <li>翻牌前：查询构建期生成的 169 手牌类表（查表值，确定性）。</li>
         <li>单挑转牌 / 河牌：精确枚举（45,540 / 990 次摊牌）。</li>
         <li>单挑翻牌：默认蒙特卡洛；显式开启后走精确枚举（1,070,190 次摊牌，约 1.8 秒）。</li>

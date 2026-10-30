@@ -11,7 +11,7 @@
 
 import { ACTION_LABELS, type ActionRecord, type ActionType } from '../../core/types.js';
 // 演出动效（发牌 / 光晕 / 气泡 / 筹码 / 座位环绕布局）。
-// 为什么由组件 import 而不是写进 styles/app.css：app.css 由并行的「全局美化」
+// 为什么由组件 import 而不是写进 styles/ 下的全局样式文件：那些文件由并行的「全局美化」
 // 任务持有，同写会冲突；本文件与这些 keyframes 同属 task-4，所有权清晰。
 // Vite 会把多个 CSS import 合并进同一个产物，不影响 G9c 的产物检查。
 import './showcase.css';

@@ -5,7 +5,7 @@
 ## [Unreleased]
 
 基于 2026-10-19 全方位评估报告（`poker-trainer-assessment-report.md`）的修复批次。
-本 `[Unreleased]` 段包含十批改动：本节的评估修复批次、文末的
+本 `[Unreleased]` 段包含十一批改动：本节的评估修复批次、文末的
 「第二批：AI 节奏与决策行为」（AI 思考时长、弃牌后流程、跟注率与去机械化）、
 「第三批：界面布局」（操作仪表盘移到牌桌下方、整页居中）、
 「第四批：采纳第三方审计方案」（复盘 EV 模型、dev 白屏、座位几何、
@@ -14,7 +14,8 @@
 「第七批：筹码继承模式 · 阶段 1-1」（可选的筹码继承、补码询问、出局/赢下整桌结算），
 「第八批：审计剩余项 · 阶段二」（节奏三档、长按 S 跳过等待），
 「第九批：审计剩余项 · 阶段 2-1」（首屏直接编辑建桌参数），
-以及「第十批：审计剩余项 · 阶段三」（手牌回放）。
+「第十批：审计剩余项 · 阶段三」（手牌回放），
+以及「第十一批：审计剩余项 · 阶段四」（技术债清理：死代码、内联样式、拆 hook 与 CSS）。
 **`src/core/` 零改动**（14 个文件哈希未变，`git status --short -- src/core` 为空），
 金额与结算逻辑不受影响。
 
@@ -746,6 +747,83 @@
   `initialStacks` 的记录，「回放」按钮 disabled 且 `title` 说明原因、点不进面板。
 - `npm run verify` 11 道闸门全绿：G1｜G2–G7,G10（21 文件 / 317 用例）｜G9a｜G9b｜G9c｜
   G11 dev 冒烟｜G8（63 passed / 4 skipped，共 67 个用例）。
+
+### 第十一批：审计剩余项 · 阶段四 —— 技术债清理（2026-10-30）
+
+本阶段**目标是不改变任何行为**：没有新增功能、没有改文案、没有动样式值。
+验收证据就是「全部闸门全绿 + E2E 全绿」，以及下面列出的量化指标。
+
+#### 变更
+
+- **4.1 清理死代码**
+  - 删 `ControllerSnapshot.aiThinking` 与 `GameController` 的 `aiThinking` 私有字段：
+    它由 controller 写入、但没有任何 UI 消费（演出层早就改用 `useTableShowcase`
+    自己的 `view.thinkingSeat`）。保留它只会让后来者误以为「controller 知道谁在想」。
+  - 删 `TableView` 的 `revealAll` prop：两个调用点（`App.tsx`、`ReplayPanel.tsx`）
+    都传 `false`，实际判断一直是 `handOver && !seat.folded`。
+  - 删 `src/review/ev.ts` 的 `countGrades()`：`ReviewPanel` 已改用一次 `reduce` 统计，
+    该函数无消费者。
+  - **`controller.runAI()` 保留**并加 `@internal` JSDoc —— 它是「拆步 vs 一次跑完」
+    同构性测试的参照实现（`tests/unit/showcase.test.ts` 逐字节比对两条路径的动作序列），
+    删掉会丢一条关键回归护栏。
+- **4.2 内联 style 收敛**：`grep -rn 'style={{' src/` 由 **46 处降到 7 处**。
+  新增的静态样式统一进 CSS 类（`.v-sm` / `.v-warn` / `.note-line` / `.stat-meter` /
+  `.stat-meter-value` / `.settings-check` / `.settings-num-sm` / `.settings-num-md` /
+  `.settings-blind-pair` / `.settings-tips` / `.history-toolbar` / `.history-summary` /
+  `.history-detail-meta` / `.num-hero` 等，追加在 `src/ui/styles/panels.css` 末尾）。
+  兜底界面 `ErrorBoundary` 单独一个 `errorboundary.css`，且**刻意写死色值不用 `var()`**
+  ——它渲染时全局样式可能已失效。
+  剩下 7 处全是**运行期值**，无法静态化：加注滑杆进度条宽（`ActionBar` 2 处）、
+  座位百分比定位（`TableView` 1 处）、统计进度条宽（`StatsPanel` 4 处）。
+- **4.3 拆 `useTableShowcase`**：`src/ui/useTableShowcase.ts` **760 → 289 行**。
+  - 纯函数层 `src/ui/showcasePlan.ts`（435 行）：公开类型、`planShowcaseStep()`、
+    节奏常量、游标数学（`visibleBoardCountOf` / `advanceBoardCursor` / `clampBoardCursor`）、
+    视图派生 `deriveShowcaseView()`、调度键 `showcaseViewKey()` / `showcaseStepKey()`。
+    新增 `SignatureSource` 结构化最小接口，避免「派生函数引用组合层类型」形成类型环。
+  - `src/ui/useBoardReveal.ts`（81 行）：`{ handId, n }` 作用域化的揭示游标。
+  - `src/ui/useSettleHold.ts`（74 行）：结束停顿计时（含「等公共牌揭完」闸门）。
+  - `src/ui/reactSupport.ts`（38 行）：`useStableCallback` + `prefersReducedMotion`。
+  - **对外 API 一字未变**：`useTableShowcase.ts` 用 `export * from './showcasePlan.js'`
+    把纯函数层原样再导出，组件 / 单测 / E2E 的 import 路径全部不用改。
+- **4.4 拆 `app.css`**：`src/ui/styles/app.css`（1784 行）按原有小节边界拆成
+  `base.css`(200) / `lobby.css`(325) / `table.css`(374) / `actions.css`(283) /
+  `panels.css`(330) / `responsive.css`(391)，由 `src/main.tsx` 按**层叠顺序**引入
+  （`responsive.css` 全是覆盖规则，必须最后）。拆分后 6 个文件正文拼接与原文件**逐字符相同**，
+  注释里过时的 `app.css` 指代同步改到具体新文件。
+
+#### 评估但未实施：4.5 状态不可变化（可选子项）
+
+路线图把 4.5 标为「可选，风险最高」，并写明「若评估后风险过高，本子项可单独拆到阶段五」。
+本轮**只做评估、不动代码**，结论是建议单独成批做，理由：
+
+1. **收益是内部的，风险落在最难定位的地方**。它的价值是把 `applyAction` 的原地修改
+   藏到 controller 边界之后（`snapshot()` 里 `structuredClone`），从而删掉
+   `App.tsx` 三处 `[snap.revision, snap.state]` 双依赖与 `viewKey` 7 段字符串键。
+   但这会改变 `useMemo`/`useEffect` 的**触发时机**，失败模式不是报错，而是
+   「偶发卡顿 / 偶发跳步」——本项目已有 4 条时序敏感的 E2E（`pace` / `ai-think-timing` /
+   `fold-flow` / `replay`），恰好能覆盖，但覆盖不等于穷尽。
+2. **本阶段验收标准是「行为零变化」**，而 4.5 没有任何用户可见收益，风险收益比在本阶段最差。
+3. **可分离性**：它与 4.1–4.4 无耦合（那四项是纯搬移与删除），单独一批做，
+   出问题可以整批回滚，不会连累已完成的技术债清理。
+
+实施要点（留给下一批）：controller `snapshot()` 返回 `structuredClone(this.state)`，
+`currentState()` 仍返回内部可变对象（`stepAiAction` 依赖它原地推进）；
+随后 `App.tsx` 三处双依赖降为 `[snap.state]`，`useTableShowcase` 用 `st` 身份替代
+`viewKey`、用 `step` 身份替代 `stepKey`（`snap` 本身每次 emit 就是新对象，
+因此身份键与原字符串键的触发频率等价）。预计改动 6 个文件、约 80 行。
+
+#### 验证
+
+- `npx tsc --noEmit` 通过；`npx vite build` 通过
+  （`dist/assets/index-D1sw3wVR.js` 344.38 kB / gzip 109.50 kB、
+  `index-CSlNaRqm.css` 36.98 kB / gzip 8.63 kB）。
+- 单测 **21 个文件 / 317 个用例**全过（121.81s），其中
+  `showcase.test.ts` 15 条（含 200 组种子的「拆步 vs 一次跑完」逐字节同构性）、
+  `showcase-cursor.test.ts` 10 条、`think-timing.test.ts` 23 条、`table-order.test.ts` 13 条。
+- `npm run verify` 11 道闸门全绿，E2E 全绿（详见提交说明）。
+- 量化指标：`useTableShowcase.ts` 760 → **289 行**（目标 < 300）；
+  `app.css` 1784 行 → 拆为 6 个文件（最大 391 行）；
+  `grep 'style={{'` 46 → **7**；`src/core/` 零改动。
 
 ## [1.1.0] - 2026-10-16
 

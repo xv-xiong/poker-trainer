@@ -1,0 +1,283 @@
+/* ============================================================
+ * 操作区：.action-panel、行动按钮、加注滑杆与快捷尺度，以及桌面端「仪表盘横置在牌桌下方」的布局。
+ *
+ * 本文件是阶段四从 app.css 拆出来的；加载顺序与拆分前的书写顺序一致，
+ * 因此层叠结果与拆分前完全相同（拆分脚本做过逐字符拼接比对）。
+ * ============================================================ */
+
+/* ---------- 操作区 ---------- */
+
+.action-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: sticky;
+  top: 16px;
+}
+
+/* 轮到自己行动时，操作区描边转金色并微微发光 */
+.action-panel.my-turn {
+  border-color: var(--gold-dim);
+  box-shadow: 0 0 20px rgba(231, 193, 131, 0.07);
+}
+
+.action-panel h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-1);
+  font-weight: 600;
+}
+
+/* ---------- 桌面端：操作仪表盘横置在牌桌下方 ----------
+   布局意图：牌桌占满整行宽度，操作区不再是右侧竖栏，而是牌桌下方的一条
+   横向仪表盘。DOM 顺序（标题 → 弃牌/跟注 → 加注区 → 提示 → 快捷键）保持不变，
+   只靠 flex-wrap 让它在一行内排开、必要时折行，因此小屏/窄容器也能自然退化。
+
+   为什么限定 min-width: 901px：≤900px 时操作区是「贴底固定条」（见文件末尾的
+   响应式段），那套竖排布局是给手机用的，不能被这里的横排覆盖。 */
+@media (min-width: 901px) {
+  .table-wrap > .action-panel {
+    position: static;
+    top: auto;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px 18px;
+    padding: 14px 20px;
+  }
+
+  .table-wrap > .action-panel > h3 {
+    flex: 0 0 auto;
+  }
+
+  /* 「弃牌 / 跟注」按钮组按内容宽度，不抢占加注区的空间 */
+  .table-wrap > .action-panel > .action-row {
+    flex: 0 0 auto;
+  }
+  .table-wrap > .action-panel > .action-row button {
+    flex: 0 0 auto;
+    min-width: 104px;
+  }
+
+  /* 加注区横排：加注到 N ｜ 滑杆 ｜ 快捷尺度 ｜ 加注 / 全下 */
+  .table-wrap > .action-panel > .raise-box {
+    flex: 1 1 520px;
+    max-width: 660px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .table-wrap > .action-panel > .raise-box .row {
+    flex: 0 0 auto;
+  }
+  .table-wrap > .action-panel > .raise-box input[type='range'] {
+    flex: 1 1 110px;
+    min-width: 96px;
+  }
+  .table-wrap > .action-panel > .raise-box .quick-sizes {
+    flex: 0 0 auto;
+  }
+  /* 快捷尺度是「1/2 池」这类带空格的短标签：不禁止换行会被压成两行，
+     把整条仪表盘顶高。 */
+  .table-wrap > .action-panel > .raise-box .quick-sizes button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+  .table-wrap > .action-panel > .raise-box .action-row {
+    flex: 0 0 auto;
+  }
+  .table-wrap > .action-panel > .raise-box .action-row button {
+    flex: 0 0 auto;
+    min-width: 78px;
+  }
+
+  /* 提示按钮、提示面板与快捷键提示 */
+  .table-wrap > .action-panel > button.ghost {
+    flex: 0 0 auto;
+  }
+  .table-wrap > .action-panel > .hint-box {
+    flex: 1 1 100%;
+  }
+  .table-wrap > .action-panel > .keyhints {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+  /* 等待条只占一小段，不要整行——否则「等待中」面板会白白高出一截 */
+  .table-wrap > .action-panel > .sc-waiting-bar {
+    flex: 0 0 140px;
+  }
+}
+
+/* 牌桌高度跟随视口：把「顶栏 + 仪表盘 + 边距」之外的高度都交给牌桌，
+   这样短屏不出现纵向滚动、高屏也不会留下大片空白（座位是百分比坐标，
+   会跟着缩放）。 */
+@media (min-width: 901px) {
+  .table-wrap > .felt {
+    min-height: clamp(400px, calc(100vh - 320px), 700px);
+  }
+  /* 结算面板出现时牌桌已无信息增量：把高度让给结算内容，
+     保证「查看复盘 / 下一手」留在首屏内。可用高度 = 视口 − 顶栏 −
+     仪表盘 − 结算面板 − 各处间距（约 288px 固定开销 + 结算面板自身高度）。 */
+  /* 结算态牌桌要给「顶排座位 / 公共牌 / 玩家座位」三条带都留出高度。
+     280px 时 9 人桌玩家座位会压住公共牌（实测 seat0 与 board 重叠 150×21.4px），
+     抬到 340px 后三条带不再相交，同时「下一手」仍在首屏内。 */
+  .game-stage.has-result .table-wrap > .felt {
+    min-height: clamp(340px, calc(100vh - 560px), 520px);
+  }
+
+  /* 结算面板横排两栏：左栏「结果 + 动作」，右栏「分配明细」。
+     竖排时整块接近 440px，会把「下一手」顶到折叠线以下。 */
+  .result-panel > .result-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px 28px;
+    align-items: start;
+  }
+  .result-panel > .result-grid > .result-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+  .result-panel > .result-grid > .result-col > h3 {
+    margin: 0;
+  }
+  .result-panel > .result-grid > .result-col > .action-row {
+    margin-top: 2px !important;
+  }
+}
+
+/* 短屏（≤880px 高）的结算态：牌桌 + 仪表盘 + 结算面板竖排会超出视口，
+   「下一手」被顶到折叠线以下。此时把结算面板放回牌桌右侧（原布局的做法），
+   牌桌保持正常高度，页面不出现滚动。 */
+@media (min-width: 901px) and (max-height: 880px) {
+  .game-stage.has-result {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 440px;
+    align-items: start;
+    align-content: center;
+    gap: 14px;
+  }
+  .game-stage.has-result > .table-wrap {
+    max-width: none;
+  }
+  .game-stage.has-result .table-wrap > .felt {
+    min-height: clamp(320px, calc(100vh - 320px), 700px);
+  }
+  /* 440px 窄栏里再分两栏会把字挤扁，退回单栏（指标卡自身会排成 2×2） */
+  .game-stage.has-result > .result-panel > .result-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+}
+
+.action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-row button {
+  flex: 1 1 auto;
+  min-width: 76px;
+}
+
+.raise-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.raise-box .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.raise-box input[type='range'] {
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--gold);
+}
+
+.raise-box .amount {
+  font-family: var(--font-num);
+  font-variant-numeric: var(--mono-tabular);
+  min-width: 62px;
+  text-align: right;
+  font-weight: 650;
+  color: var(--gold);
+}
+
+.quick-sizes {
+  display: flex;
+  gap: 5px;
+}
+
+.quick-sizes button {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 11px;
+}
+
+.hint-box {
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius);
+  padding: 10px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.hint-box .kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hint-box .kv .k {
+  color: var(--fg-2);
+}
+
+.hint-box .kv .v {
+  font-family: var(--font-num);
+  font-variant-numeric: var(--mono-tabular);
+  font-weight: 650;
+  color: var(--gold);
+}
+
+.keyhints {
+  font-size: 11.5px;
+  color: var(--fg-2);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+kbd {
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-family: var(--font-num);
+  font-size: 11px;
+}
+
