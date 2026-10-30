@@ -293,7 +293,7 @@ scripts/             构建期生成脚本 + 一键验收
 | G10 | 持久化健壮性：迁移、损坏数据不白屏、FIFO 上限 |
 | G11 | dev 冒烟：vite dev 下连打 3 手、点「下一手」不白屏（生产构建看不到这类缺陷） |
 
-当前规模：单元与属性测试 **22 个文件 / 324 个用例**，E2E **67 个用例**（含线上部署验收，未配置 `LIVE_URL` 时跳过）。
+当前规模：单元与属性测试 **23 个文件 / 326 个用例**，E2E **67 个用例**（含线上部署验收，未配置 `LIVE_URL` 时跳过）。
 
 另有针对性回归测试覆盖下列已修缺陷：
 
@@ -317,6 +317,7 @@ scripts/             构建期生成脚本 + 一键验收
 | 切换节奏档位不影响等待时长（档位没接进调度链路） | `tests/e2e/pace.spec.ts` |
 | 长按 S 跳过等待后不解除（后续每一手都瞬发） | `tests/e2e/pace.spec.ts` |
 | 答完补码后停在空桌（补码流程不开下一手） | `tests/e2e/carry-over.spec.ts` |
+| 玩家关闭一街且下一街先行动时操作区永久冻结（标题「你的行动」但按钮全灰、AI 也不再动） | `tests/unit/showcase-deadlock.test.ts`、`scripts/dev-smoke.mjs` |
 | 快照被引擎原地改写（历史帧/复盘早期决策被后来的状态污染） | `tests/unit/state-clone.test.ts` |
 | 继承模式筹码不跨手 / 输光无结局 / AI 下桌仍占座 | `tests/unit/carry-over.test.ts`、`tests/e2e/carry-over.spec.ts` |
 | 加注滑杆无 `aria-valuetext`、tab 与面板未互指、底池变化不可播报 | `tests/e2e/ux-fixes.spec.ts` |

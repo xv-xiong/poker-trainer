@@ -386,6 +386,22 @@ export function deriveShowcaseView(input: DeriveViewInput): ShowcaseView {
   // 避免两处口径不一致。
   const settled = st.finished && settleHold;
   const lastAction = st.actions.length > 0 ? st.actions[st.actions.length - 1] : null;
+  /**
+   * 玩家在**当前这一街**是否已经动作过。
+   *
+   * 判据必须是「同一条街」，不能只看「末条动作是不是玩家」——否则会死锁：
+   * 玩家动作恰好关闭了这一街（例如他是本街最后一个行动的人），下一街发完牌
+   * 又轮到玩家先行动时，`actingSeat === heroSeat` 成立，但末条动作仍是玩家
+   * 上一街的那一手，于是 `canHeroAct` 永远为 false。此时 `planShowcaseStep`
+   * 返回的 `hero-action` 步在 `run()` 里不改变任何状态，定时器不会重新装载，
+   * 界面就永久停在「你的行动 / 动作确认中…」且按钮全灰。
+   *
+   * 这个死锁是 2026-10-30 用 G11 dev 冒烟（连打 15 手）抓到的，现场 trace：
+   * `{step:"hero-action", acting:0, actions:21, board:5, revealed:5,
+   *   canHeroAct:false, finished:false}`。当时误判成「环境抖动」，实际是
+   * 每手约 5% 概率会撞上的真 bug。
+   */
+  const heroActedThisStreet = lastAction !== null && lastAction.seat === heroSeat && lastAction.street === st.street;
 
   // ── 思考态判定 ──
   // 轮到 AI 且公共牌已揭完 → 正在思考（“下一步要做什么”）
@@ -401,8 +417,9 @@ export function deriveShowcaseView(input: DeriveViewInput): ShowcaseView {
       !st.finished &&
       visibleBoardCount >= st.board.length &&
       st.actingSeat === heroSeat &&
-      // 玩家刚动作完（act 尚未把 actingSeat 移走）不算可行动
-      lastAction?.seat !== heroSeat,
+      // 玩家本街刚动作完（气泡还没看完）不算可行动；跨街则必须放行，
+      // 否则「玩家关闭一街 + 下一街先行动」会永久冻结（见上面的注释）。
+      !heroActedThisStreet,
     lastAction,
     visibleBoardCount,
     shownBoard: st.board.slice(0, visibleBoardCount),

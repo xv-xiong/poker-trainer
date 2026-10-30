@@ -140,8 +140,52 @@ async function resultVisible(page) {
  * 把「冒烟脚本找不到按钮」误报成「页面卡死」——G11 的价值是抓真白屏，
  * 不能因为一手合法的短码牌而失败，所以这里退一步弃牌，让 AI 把这一手打完。
  */
+/**
+ * 收集「为什么点不动」的现场证据。
+ *
+ * 需要它是因为 2026-10-30 CI 上 G11 失败过一次：第 3 手停在河牌、150s 未结算，
+ * 而日志里只有一句「未打完」+ 截断的 body，看不出到底是白屏、等待态还是弹窗，
+ * 只能靠猜。冒烟脚本的失败信息必须自证——否则每次抖动都要重跑一轮 20 分钟的
+ * verify 去复现。
+ */
+async function diagnose(page) {
+  return page.evaluate(() => {
+    const has = (sel) => document.querySelector(sel) !== null;
+    const enabled = Array.from(document.querySelectorAll('button'))
+      .filter((b) => !b.disabled)
+      .map((b) => (b.textContent ?? '').replace(/\s+/g, ' ').trim())
+      .filter((t) => t.length > 0);
+    const headings = Array.from(document.querySelectorAll('h2, h3')).map((h) =>
+      (h.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    );
+    const active = document.querySelector('.seat.active');
+    return {
+      felt: has('[data-testid="felt"]'),
+      actionPanel: has('.action-panel'),
+      waiting: has('[data-testid="action-waiting"]'),
+      myTurn: has('[data-testid="action-my-turn"]'),
+      rebuyDialog: has('[data-testid="rebuy-dialog"]'),
+      sessionEnd: has('[data-testid="session-end"]'),
+      resultPanel: has('.result-panel'),
+      boardRevealed: document.querySelector('[data-testid="board"]')?.getAttribute('data-revealed') ?? null,
+      activeSeat: active?.getAttribute('data-seat') ?? null,
+      enabledButtons: enabled.slice(0, 12),
+      headings: headings.slice(0, 8),
+      // dev-only 调度轨迹（useTableShowcase 在非生产环境维护，上限 400 条）。
+      // 死锁类问题的关键证据：最后几步的 step 种类、座位、公共牌张数、canHeroAct。
+      trace: Array.isArray(globalThis.__showcaseTrace)
+        ? globalThis.__showcaseTrace.slice(-12)
+        : null,
+    };
+  });
+}
+
 async function playOneHand(page, index) {
   const deadline = Date.now() + HANDS_TIMEOUT_MS;
+  // 「点不动」多久算异常：AI 每步最多 ~2.4s，一手最多几十步，
+  // 20s 完全没有可点按钮且没结算，说明不是正常等待。
+  const STALL_MS = 20_000;
+  let lastProgressAt = Date.now();
   while (Date.now() < deadline) {
     // 一旦出现未捕获异常，立刻中止——继续等只会等到超时，掩盖真正的报错。
     if (failures.some((f) => f.hand === index && f.kind === 'pageerror')) {
@@ -150,6 +194,13 @@ async function playOneHand(page, index) {
     if (await resultVisible(page)) return;
     const clicked = await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('button')).filter((b) => !b.disabled);
+      // 补码询问是模态闸门：不回答它，牌桌永远不动。冒烟脚本替玩家选「补码」，
+      // 这样能继续把后面的手打完（选不补码会进入出局结算，那是另一条路径）。
+      const rebuy = document.querySelector('[data-testid="rebuy-yes"]');
+      if (rebuy instanceof HTMLElement && !rebuy.hasAttribute('disabled')) {
+        rebuy.click();
+        return true;
+      }
       // 优先跟注/过牌（能继续参与这一手，最接近真实练习的路径）。
       const passive = buttons.find((b) => /跟注|过牌/.test(b.textContent ?? ''));
       if (passive) {
@@ -163,11 +214,28 @@ async function playOneHand(page, index) {
         fold.click();
         return true;
       }
+      // 全下需要二次确认：第一次点完按钮文案会变成确认态，再点一次即可。
+      const allinConfirm = buttons.find((b) => /确认/.test(b.textContent ?? ''));
+      if (allinConfirm) {
+        allinConfirm.click();
+        return true;
+      }
       return false;
     });
+    if (clicked) {
+      lastProgressAt = Date.now();
+    } else if (Date.now() - lastProgressAt > STALL_MS) {
+      const info = await diagnose(page);
+      throw new Error(
+        `第 ${index} 手连续 ${STALL_MS}ms 没有任何可点按钮且未结算；现场：${JSON.stringify(info)}`,
+      );
+    }
     await sleep(clicked ? 160 : 120);
   }
-  throw new Error(`第 ${index} 手在 ${HANDS_TIMEOUT_MS}ms 内未打完（结算面板未出现）`);
+  const info = await diagnose(page);
+  throw new Error(
+    `第 ${index} 手在 ${HANDS_TIMEOUT_MS}ms 内未打完（结算面板未出现）；现场：${JSON.stringify(info)}`,
+  );
 }
 
 /** 点「下一手」，等结算面板消失（新手开始）。白屏 bug 就在这一步触发。 */
@@ -192,7 +260,7 @@ function printFailureReport(pageText) {
   }
   if (typeof pageText === 'string') {
     console.error(`  - 失败时 body 文本长度：${pageText.length}`);
-    if (pageText.length > 0) console.error(`  - body 片段：${pageText.slice(0, 200)}`);
+    if (pageText.length > 0) console.error(`  - body 片段：${pageText.slice(0, 600)}`);
   }
 }
 
