@@ -49,7 +49,6 @@ import {
   deriveShowcaseView,
   planShowcaseStep,
   showcaseStepKey,
-  showcaseViewKey,
   type ShowcaseStep,
   type ShowcaseTiming,
   type ShowcaseView,
@@ -99,15 +98,13 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
   const st = snap.state;
   // 当前手牌 id：游标是 `{ handId, n }` 作用域化的，渲染期就要用它派生可见张数。
   const handId = st?.handId ?? null;
-  // 视图 / 调度键（纯函数层）：state 是原地修改的对象，引用不变，必须用原始值组合键。
-  const viewKey = showcaseViewKey(snap);
 
   // 演出代数：新一手自增
   const [epoch, setEpoch] = useState(0);
 
   // 揭示游标（内部 hook）：换手后派生值立刻为 0，不依赖「换手重置」effect。
   const boardLen = st?.board.length ?? 0;
-  const reveal = useBoardReveal(handId, boardLen, viewKey);
+  const reveal = useBoardReveal(handId, boardLen, st);
   const visibleBoardCount = reveal.visibleBoardCount;
 
   // 结束停顿（内部 hook）：必须等公共牌全部揭示完才开始计时。
@@ -118,7 +115,7 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
     boardLen,
     settleMs: timing.settleMs,
     epoch,
-    signature: viewKey,
+    signature: st,
   });
   const settleHold = settle.settleHold;
   const setSettleHold = settle.setSettleHold;
@@ -152,11 +149,11 @@ export function useTableShowcase(opts: UseTableShowcaseOptions): TableShowcase {
     setEpoch((e) => e + 1);
   }, [handId, setSettleHold]);
 
+  // 4.5 之后 `snap.state` 是 controller 每次 emit 重新克隆的对象，
+  // 身份变化即代表状态变化，因此依赖 `st` 本身就够（不再需要七段字符串键）。
   const view = useMemo<ShowcaseView>(
     () => deriveShowcaseView({ state: st, heroSeat, visibleBoardCount, settleHold, timing }),
-    // viewKey 是必须的：state 是原地修改的对象，引用不变，只依赖 st 会让视图永不重算。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [viewKey, visibleBoardCount, settleHold, heroSeat, timing],
+    [st, visibleBoardCount, settleHold, heroSeat, timing],
   );
 
   const step = useMemo(

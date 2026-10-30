@@ -336,24 +336,6 @@ export interface UseTableShowcaseOptions {
 }
 
 /**
- * 视图重算键。
- *
- * **这是演出层最关键的依赖设计。** `applyAction` 是**原地修改** `HandState`
- * （为性能避免每步深拷贝），所以 `snap.state` 的对象引用永远不变。
- * 若把 `state` 直接放进 `useMemo`/`useEffect` 的依赖数组，依赖永远"没变"，
- * 视图就再也不会重算——表现为**画面停在第一次渲染的样子**：
- * 公共牌永远不出现、动作气泡永远不显示、座位光晕停在第一个 AI 上，
- * 而底池数字（来自 state 的实时读取）却在变。这类"半死不活"的卡顿
- * 极难从现象反推原因，因此这里显式用 primitive 组合成键。
- */
-export function showcaseViewKey(snap: ControllerSnapshot): string {
-  const st = snap.state;
-  return `${snap.revision}|${st?.handId ?? ''}|${st?.actions.length ?? -1}|${st?.board.length ?? -1}|${
-    st?.actingSeat ?? -2
-  }|${st?.finished ? 1 : 0}|${st?.street ?? ''}`;
-}
-
-/**
  * 调度键：只由「原始值」构成。用它（而不是对象）做上层 effect 的依赖，
  * 才能保证「同一步骤不会因为重新渲染而被重新排队 / 被自己的清理函数取消」。
  *

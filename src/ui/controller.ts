@@ -23,6 +23,7 @@ import type {
   Stats,
 } from '../core/types.js';
 import { defaultSettings, emptyStats } from '../core/types.js';
+import { cloneHandState } from './stateClone.js';
 
 /** 一个「输光待决策」的座位。 */
 export interface PendingBust {
@@ -45,9 +46,12 @@ export interface ControllerSnapshot {
   /**
    * 单调递增的修订号，每次 emit 递增。
    *
-   * 为什么需要它：`applyAction` 是**原地修改** HandState（为性能避免每步深拷贝），
-   * 因此 React 的 useEffect 若以 `snap.state` 为依赖，引用不变会导致副作用不再触发，
-   * 表现为「玩家行动后 AI 永远不行动」。修订号给 React 一个可靠的变化信号。
+   * 阶段四 4.5 之后 `snapshot().state` 已是**深拷贝**（见 `src/ui/stateClone.ts`），
+   * 因此「状态有没有变」可以直接靠对象身份判断，不再需要 revision 兜底。
+   * revision 现在只剩两个用途：
+   *   1. 调试 / 观测（`__showcaseTrace` 记录调度轨迹）；
+   *   2. 作为 AI 思考时长的抽样键之一（`seed|revision|seat`，保证同一步骤
+   *      在重渲染时抽到同一个时长，换一步才换值）。
    */
   revision: number;
   legal: LegalActions | null;
@@ -190,7 +194,10 @@ export class GameController {
 
   snapshot(): ControllerSnapshot {
     return {
-      state: this.state,
+      // 返回深拷贝而不是内部对象：内部状态仍由 `applyAction` 原地修改（引擎性能），
+      // 但订阅者拿到的是不可变快照 —— 「对象身份变了」就等于「状态变了」，
+      // 下游不必再用 viewKey / revision 之类的组合键模拟变化信号。
+      state: this.state ? cloneHandState(this.state) : null,
       revision: this.revision,
       legal: this.state && this.state.actingSeat >= 0 ? legalActions(this.state, this.state.actingSeat) : null,
       heroTurn: Boolean(this.state && !this.state.finished && this.state.actingSeat === this.heroSeat),

@@ -39,13 +39,13 @@ export interface BoardReveal {
 /**
  * @param handId   当前手牌 id（`null` = 还没有牌局）
  * @param boardLen 引擎里真实公共牌张数
- * @param signature 视图重算键：`state` 是原地修改的对象，引用不变，
- *                  自检 effect 必须靠这个原始值组合键才会重新执行
+ * @param signature 视图重算信号：4.5 之后 `snap.state` 是每次 emit 的深拷贝，
+ *                  直接把对象传进来即可（自检 effect 靠它的身份变化重新执行）
  */
 export function useBoardReveal(
   handId: string | null,
   boardLen: number,
-  signature: string,
+  signature: unknown,
 ): BoardReveal {
   const [cursor, setCursor] = useState<BoardCursor>({ handId: null, n: 0 });
 

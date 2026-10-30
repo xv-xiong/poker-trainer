@@ -31,8 +31,8 @@ export interface SettleHoldInput {
   settleMs: number;
   /** 演出代数：新一手自增，用于强制重新走一次停顿。 */
   epoch: number;
-  /** 视图重算键（`state` 原地修改，引用不变，靠它触发自检）。 */
-  signature: string;
+  /** 视图重算信号（4.5 之后是每次 emit 的深拷贝快照，靠它的身份触发自检）。 */
+  signature: unknown;
 }
 
 export interface SettleHold {

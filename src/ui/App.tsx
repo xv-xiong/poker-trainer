@@ -247,9 +247,11 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // `snap.state` 是 controller 每次 emit 重新克隆出来的对象，
+  // 身份变化即代表状态变化，因此只依赖它就够（不再需要 revision 兜底）。
   const pot = useMemo(
     () => (snap.state ? snap.state.seats.reduce((a, s) => a + s.committed, 0) : 0),
-    [snap.revision, snap.state],
+    [snap.state],
   );
 
   /**
@@ -272,7 +274,7 @@ export function App() {
     // 此时争夺层只剩一名未弃牌者，任何 rankOf 都给出同一结果，故回退值安全。
     const rankOf = (seat: number): number => st.showdownValues[seat] ?? -Infinity;
     return settlementBreakdown(st.pots, rankOf);
-  }, [snap.revision, snap.state]);
+  }, [snap.state]);
 
   const seatLabelOf = (seat: number): string =>
     snap.state?.seats[seat]?.name ?? `座位 ${seat + 1}`;

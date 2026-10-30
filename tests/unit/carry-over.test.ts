@@ -250,8 +250,16 @@ describe('阶段 1-1：筹码真的跨手延续', () => {
     playOneHand(c);
     const after = c.snapshot();
     const rosterStack = after.roster[0].stack;
-    // 单挑零和：玩家资金的变化必须与 AI 筹码的变化等额反向
-    expect(after.bankroll - 1000).toBe(-(rosterStack - 1000));
+    // 单挑零和：玩家资金的变化必须与 AI 筹码的变化等额反向。
+    //
+    // 这里断言「两者之和为 0」而不是 `heroDelta === -aiDelta`：单挑也可能打平
+    // （公共牌成牌、双方分池），此时两边变化都是 0，而 `-(0)` 是 `-0`，
+    // `Object.is(0, -0) === false`，用 `toBe` 会偶发假红。
+    // 牌局种子取 `Date.now() ^ handCounter * ...`（见 controller.startHand），
+    // 每次运行抽到的牌都不同，所以这个假红只在跑到平局手时出现，很难复现。
+    const heroDelta = after.bankroll - 1000;
+    const aiDelta = rosterStack - 1000;
+    expect(heroDelta + aiDelta).toBe(0);
   });
 });
 

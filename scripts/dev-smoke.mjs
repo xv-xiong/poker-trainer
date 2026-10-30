@@ -131,7 +131,15 @@ async function resultVisible(page) {
   );
 }
 
-/** 轮询点击最便宜的「跟注 / 过牌」按钮，直到本手结束（结算面板出现）。 */
+/**
+ * 轮询点击「跟注 / 过牌」按钮，直到本手结束（结算面板出现）。
+ *
+ * 为什么要留「弃牌」兜底：玩家筹码短于需跟注额时，合法动作只剩「弃牌 / 全下」，
+ * 界面上根本没有跟注或过牌按钮。这不是缺陷而是正常牌局（例如盲注战里跟一手大注
+ * 后只剩几十筹码，对面再推全下）。早先只认跟注/过牌，遇到这种牌就空转到超时，
+ * 把「冒烟脚本找不到按钮」误报成「页面卡死」——G11 的价值是抓真白屏，
+ * 不能因为一手合法的短码牌而失败，所以这里退一步弃牌，让 AI 把这一手打完。
+ */
 async function playOneHand(page, index) {
   const deadline = Date.now() + HANDS_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -141,12 +149,21 @@ async function playOneHand(page, index) {
     }
     if (await resultVisible(page)) return;
     const clicked = await page.evaluate(() => {
-      const btn = Array.from(document.querySelectorAll('button')).find(
-        (b) => /跟注|过牌/.test(b.textContent ?? '') && !b.disabled,
-      );
-      if (!btn) return false;
-      btn.click();
-      return true;
+      const buttons = Array.from(document.querySelectorAll('button')).filter((b) => !b.disabled);
+      // 优先跟注/过牌（能继续参与这一手，最接近真实练习的路径）。
+      const passive = buttons.find((b) => /跟注|过牌/.test(b.textContent ?? ''));
+      if (passive) {
+        passive.click();
+        return true;
+      }
+      // 兜底：只剩弃牌/全下时主动弃牌。弃牌不需要二次确认（全下需要），
+      // 且同样会让 AI 继续把这一手打完，满足「白屏只会发生在换手时」的观测目标。
+      const fold = buttons.find((b) => /弃牌/.test(b.textContent ?? ''));
+      if (fold) {
+        fold.click();
+        return true;
+      }
+      return false;
     });
     await sleep(clicked ? 160 : 120);
   }

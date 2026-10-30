@@ -5,7 +5,7 @@
 ## [Unreleased]
 
 基于 2026-10-19 全方位评估报告（`poker-trainer-assessment-report.md`）的修复批次。
-本 `[Unreleased]` 段包含十一批改动：本节的评估修复批次、文末的
+本 `[Unreleased]` 段包含十二批改动：本节的评估修复批次、文末的
 「第二批：AI 节奏与决策行为」（AI 思考时长、弃牌后流程、跟注率与去机械化）、
 「第三批：界面布局」（操作仪表盘移到牌桌下方、整页居中）、
 「第四批：采纳第三方审计方案」（复盘 EV 模型、dev 白屏、座位几何、
@@ -15,7 +15,8 @@
 「第八批：审计剩余项 · 阶段二」（节奏三档、长按 S 跳过等待），
 「第九批：审计剩余项 · 阶段 2-1」（首屏直接编辑建桌参数），
 「第十批：审计剩余项 · 阶段三」（手牌回放），
-以及「第十一批：审计剩余项 · 阶段四」（技术债清理：死代码、内联样式、拆 hook 与 CSS）。
+「第十一批：审计剩余项 · 阶段四」（技术债清理：死代码、内联样式、拆 hook 与 CSS），
+以及「第十二批：阶段四 4.5」（状态不可变化：controller 边界深拷贝、删掉 viewKey 组合键）。
 **`src/core/` 零改动**（14 个文件哈希未变，`git status --short -- src/core` 为空），
 金额与结算逻辑不受影响。
 
@@ -791,10 +792,11 @@
   （`responsive.css` 全是覆盖规则，必须最后）。拆分后 6 个文件正文拼接与原文件**逐字符相同**，
   注释里过时的 `app.css` 指代同步改到具体新文件。
 
-#### 评估但未实施：4.5 状态不可变化（可选子项）
+#### 4.5 状态不可变化：本轮只评估，下一批实施（已在第十二批完成）
 
 路线图把 4.5 标为「可选，风险最高」，并写明「若评估后风险过高，本子项可单独拆到阶段五」。
-本轮**只做评估、不动代码**，结论是建议单独成批做，理由：
+本轮**只做评估、不动代码**（4.5 随后在第十二批落地，见下文），当时的判断是
+「建议单独成批做」，理由：
 
 1. **收益是内部的，风险落在最难定位的地方**。它的价值是把 `applyAction` 的原地修改
    藏到 controller 边界之后（`snapshot()` 里 `structuredClone`），从而删掉
@@ -824,6 +826,65 @@
 - 量化指标：`useTableShowcase.ts` 760 → **289 行**（目标 < 300）；
   `app.css` 1784 行 → 拆为 6 个文件（最大 391 行）；
   `grep 'style={{'` 46 → **7**；`src/core/` 零改动。
+
+### 第十二批：阶段四 4.5 —— 状态不可变化（2026-10-30）
+
+阶段四收尾时 4.5 被评估为「风险最高、收益纯内部」而推迟；本批把它做完。
+一句话：**把「原地修改 + 修订号模拟变化」换成「controller 边界处的不可变快照」**，
+于是下游不必再用字符串组合键猜「状态有没有变」。
+
+#### 变更
+
+- **新增 `src/ui/stateClone.ts`**：`cloneHandState(state): HandState` 手写深拷贝
+  （`seats` 逐座位含 `holeCards`、`actions` 逐条、`pots` 含 `eligible` / `contributors`、
+  `showdownValues`、`board` / `deck` / `results` / `initialStacks` 数组）。
+  **刻意手写而不是 `structuredClone`**：① `HandState` 加字段时手写拷贝会编译报错，
+  提醒补一行；`structuredClone` 会静默漏掉语义（拷贝了但没有正确初始化）；
+  ② 不依赖运行时全局（Worker / 旧环境）；③ 小对象比结构化克隆快。
+- **`GameController.snapshot()` 返回深拷贝**：内部 `this.state` 仍由 `applyAction`
+  原地修改（引擎性能不变），但订阅者拿到的是不可变快照 —— 「对象身份变了」就等于
+  「状态变了」。`currentState()` **仍返回内部可变对象**（`stepAiAction` 依赖它原地推进）。
+- **`App.tsx`**：两处 `[snap.revision, snap.state]` 双依赖降为 `[snap.state]`
+  （底池 memo、结算分配 memo）。
+- **删掉 `showcaseViewKey()`**（`showcasePlan.ts` 里 7 段字符串键）：`useTableShowcase`
+  直接用 `st` 对象身份做 `view` memo 与两个内部 hook 的重算信号；
+  `useBoardReveal` / `useSettleHold` 的 `signature: string` 参数类型放宽为 `unknown`。
+- **`revision` 保留但降级**：它仍是「调试观测」（`__showcaseTrace` 记录调度轨迹）
+  与「AI 思考时长抽样键」（`seed|revision|seat`，保证同一步骤重渲染时抽到同一时长）的
+  一部分，不再承担「告诉 React 状态变了」的职责。接口注释已改写。
+
+#### 刻意保留（不在 4.5 范围内）
+
+- `App.tsx` 定时器 effect 的 `[snap.revision, table.step, table.run]` 与
+  「玩家思考时长」统计 effect 仍依赖 `revision`：改它们会改变定时器重置时机与
+  `thinkMs` 统计口径，属于行为变化，不是 4.5 的目标。
+- `showcaseStepKey` 保留：它与视图键是不同关注点 —— `step` 的身份不含 `delayMs`，
+  而 `delayMs`（AI 思考时长）每帧读最新值，靠 `stableStep` 单独覆盖。
+
+#### 顺带修掉两处测试基础设施的偶发假红（非产品缺陷）
+
+- `tests/unit/carry-over.test.ts`「一手的输赢会写回账本」：单挑可能打平（分池），
+  此时双方变化都是 0，而 `-(0)` 是 `-0`，`Object.is(0, -0) === false`，
+  原断言 `toBe(-(rosterStack - 1000))` 会**偶发**假红（牌局种子含 `Date.now()`，
+  每次运行抽到的牌都不同）。改为断言「两边变化之和为 0」。
+- `scripts/dev-smoke.mjs`（G11）：玩家筹码短于需跟注额时，界面上只有「弃牌 / 全下」，
+  原脚本只认「跟注 / 过牌」→ 空转到 150s 超时，把「脚本找不到按钮」误报成「页面卡死」。
+  增加「弃牌」兜底并写明原因：G11 的价值是抓真白屏，不该因一手合法的短码牌而失败。
+
+#### 验证
+
+- `npx tsc --noEmit` 通过；`npx vite build` 通过
+  （`dist/assets/index-CawL8z05.js` 344.58 kB / gzip 109.55 kB、
+  `index-CSlNaRqm.css` 36.98 kB / gzip 8.63 kB）。
+- 新增 `tests/unit/state-clone.test.ts`（7 条）：深拷贝后所有容器都不共享引用、
+  改副本不影响原状态（逐层验证）、改原状态不影响副本、边角空状态；
+  以及 controller 三条 —— 快照与 `currentState()` 值相等但非同一对象、
+  动作后快照身份变化、**旧快照不会被后续动作污染**（不可变快照的核心保证）。
+- 单测 **22 个文件 / 324 个用例**全过（226.24s）。
+- `npm run verify` 11 道闸门全绿：G1 2.7s｜G2–G7,G10 227.8s（324 用例）｜G9a 3.7s｜
+  G9b 3.4s｜G9c｜G11 dev 冒烟 99.4s｜G8 **886.9s（63 passed / 4 skipped）**。
+  **E2E 全绿即「行为零变化」的证据**：63 条端到端断言（含时序敏感的
+  `pace` / `ai-think-timing` / `fold-flow` / `replay` / `geometry`）全部照旧通过。
 
 ## [1.1.0] - 2026-10-16
 

@@ -135,7 +135,9 @@ src/
 └── ui/              React 界面
     ├── controller.ts      对局控制器（状态机 + 订阅/快照，纯 TS 无 JSX）
     ├── showcasePlan.ts    演出编排纯函数层（步进规划 / 游标数学 / 视图派生）
+    ├── stateClone.ts      HandState 深拷贝（controller 边界产出不可变快照）
     ├── useTableShowcase.ts 演出调度 hook（薄组合层，只负责何时推进）
+    ├── useBoardReveal.ts / useSettleHold.ts  揭示游标 / 结算停顿（各自一件事）
     ├── replay.ts / useReplay.ts  手牌回放（只读，不写统计）
     └── styles/            全局样式，按层叠顺序引入：
                            base → lobby → table → actions → panels → responsive
@@ -274,7 +276,7 @@ scripts/             构建期生成脚本 + 一键验收
 | G10 | 持久化健壮性：迁移、损坏数据不白屏、FIFO 上限 |
 | G11 | dev 冒烟：vite dev 下连打 3 手、点「下一手」不白屏（生产构建看不到这类缺陷） |
 
-当前规模：单元与属性测试 **21 个文件 / 317 个用例**，E2E **67 个用例**（含线上部署验收，未配置 `LIVE_URL` 时跳过）。
+当前规模：单元与属性测试 **22 个文件 / 324 个用例**，E2E **67 个用例**（含线上部署验收，未配置 `LIVE_URL` 时跳过）。
 
 另有针对性回归测试覆盖下列已修缺陷：
 
@@ -298,6 +300,7 @@ scripts/             构建期生成脚本 + 一键验收
 | 切换节奏档位不影响等待时长（档位没接进调度链路） | `tests/e2e/pace.spec.ts` |
 | 长按 S 跳过等待后不解除（后续每一手都瞬发） | `tests/e2e/pace.spec.ts` |
 | 答完补码后停在空桌（补码流程不开下一手） | `tests/e2e/carry-over.spec.ts` |
+| 快照被引擎原地改写（历史帧/复盘早期决策被后来的状态污染） | `tests/unit/state-clone.test.ts` |
 | 继承模式筹码不跨手 / 输光无结局 / AI 下桌仍占座 | `tests/unit/carry-over.test.ts`、`tests/e2e/carry-over.spec.ts` |
 | 加注滑杆无 `aria-valuetext`、tab 与面板未互指、底池变化不可播报 | `tests/e2e/ux-fixes.spec.ts` |
 | 建桌参数只能在进桌后的设置里改（首屏只读，改完还要等下一手） | `tests/e2e/lobby-setup.spec.ts` |
