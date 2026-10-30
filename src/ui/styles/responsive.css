@@ -11,10 +11,10 @@
 @keyframes turn-glow {
   0%,
   100% {
-    box-shadow: 0 0 10px rgba(231, 193, 131, 0.15);
+    box-shadow: 0 0 10px rgba(94, 169, 199, 0.16);
   }
   50% {
-    box-shadow: 0 0 22px rgba(231, 193, 131, 0.4);
+    box-shadow: 0 0 22px rgba(94, 169, 199, 0.42);
   }
 }
 

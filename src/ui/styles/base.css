@@ -169,11 +169,13 @@ select:focus {
   color: var(--fg-0);
 }
 
+/* 页签是导航（环境），不是「要你决定的事」——用环境色下划线，
+   把金色留给操作区按钮与底池金额。 */
 .tab.active {
   background: transparent;
   border-color: transparent;
-  box-shadow: inset 0 -2px 0 var(--gold);
-  color: var(--gold);
+  box-shadow: inset 0 -2px 0 var(--opp);
+  color: var(--fg-0);
   font-weight: 600;
 }
 

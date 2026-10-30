@@ -233,9 +233,11 @@
   transition: border-color 0.25s, box-shadow 0.25s, opacity var(--t-fade);
 }
 
-/* 当前行动座位：金色描边 + 呼吸光晕（turn-glow） */
+/* 当前行动座位：冷色描边 + 呼吸光晕（turn-glow）。
+   为什么不是金色：多数时候「当前行动者」是对手（AI 在思考），
+   属于环境信息；轮到玩家时真正的决策提示是操作区的金色主按钮。 */
 .seat.active {
-  border-color: var(--gold);
+  border-color: var(--opp);
   animation: turn-glow 2s ease-in-out infinite;
 }
 
@@ -273,10 +275,18 @@
   text-overflow: ellipsis;
 }
 
+/* 对手筹码：中性色（环境数据）。
+   玩家自己的筹码在下面单独用金色 —— 那是「你能下多少」，
+   属于决策信息，值得与对手区分开。 */
 .seat .stack {
   font-family: var(--font-num);
   font-size: 13.5px;
   font-variant-numeric: var(--mono-tabular);
+  color: var(--fg-1);
+}
+
+/* 玩家自己的筹码：保留金色（决策相关） */
+.seat.hero .stack {
   color: var(--gold);
 }
 
@@ -301,18 +311,20 @@
   letter-spacing: 0.03em;
 }
 
+/* 庄家按钮也是位置标记（环境信息），跟 SB/BB 一起归冷色。
+   用 --opp-dim 而非 --opp：底是白牌面，浅青在上面对比不足。 */
 .badge.dealer {
   background: var(--card-face);
-  color: var(--gold-text);
+  color: var(--opp-dim);
   border-color: var(--card-face);
   font-weight: 700;
 }
 
 .badge.sb,
 .badge.bb {
-  background: var(--gold-soft);
-  color: var(--gold);
-  border-color: var(--gold-dim);
+  background: var(--opp-soft);
+  color: var(--opp);
+  border-color: var(--opp-dim);
 }
 
 .badge.folded {
