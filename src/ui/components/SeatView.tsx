@@ -11,6 +11,7 @@ import { CardView } from './CardView.js';
 import { ActionBubble, ThinkingBubble } from './ActionBubble.js';
 import type { ActionRecord } from '../../core/types.js';
 import { AI_TIER_LABELS, type HandState, type Seat } from '../../core/types.js';
+import { type ChipUnit, formatAmount, formatChips } from '../chipUnit.js';
 
 /** 该座位本街投入是否刚刚变化过（用于数字强调动画）。 */
 export interface SeatShowcase {
@@ -41,6 +42,7 @@ export function SeatView({
   bigBlindSeat,
   showcase,
   isWinnerSeat = false,
+  chipUnit = 'chips',
 }: {
   seat: Seat;
   state: HandState;
@@ -53,6 +55,8 @@ export function SeatView({
   showcase?: SeatShowcase;
   /** 该座位是本手赢家（用于结算高亮，与 `isWinner` 的区别：后者含摊牌牌型高亮）。 */
   isWinnerSeat?: boolean;
+  /** 筹码显示单位（阶段六，只影响展示）。 */
+  chipUnit?: ChipUnit;
 }) {
   const cls = ['seat'];
   if (isHero) cls.push('hero');
@@ -88,7 +92,12 @@ export function SeatView({
         <span className="name" title={seat.name}>
           {seat.name}
         </span>
-        <span className="stack">{seat.stack}</span>
+        {/* 筹码：BB 档显示大盲倍数，精确筹码数挂 title。
+            刻意不加 `data-testid`：既有 E2E 与单测都用 `.stack` 的文本，
+            默认档下文本与改动前逐字符相同。 */}
+        <span className="stack" title={formatAmount(seat.stack, 'chips', state.bigBlind)}>
+          {formatChips(seat.stack, chipUnit, state.bigBlind)}
+        </span>
       </div>
 
       {/* 底牌：**始终渲染**。座位大小由 CSS 控制，绝不能用「是否渲染」来省空间——
@@ -121,8 +130,9 @@ export function SeatView({
           key={`${seat.committedThisStreet}-${showcase?.chipKey ?? 0}`}
           className={`committed ${showcase?.committedBump ? 'sc-bump' : ''}`}
           data-testid="committed"
+          title={formatAmount(seat.committedThisStreet, 'chips', state.bigBlind)}
         >
-          本街投入 {seat.committedThisStreet}
+          本街投入 {formatChips(seat.committedThisStreet, chipUnit, state.bigBlind)}
         </div>
       )}
     </div>

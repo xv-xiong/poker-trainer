@@ -13,7 +13,7 @@ import { computeEquity, potOdds, AI_ITERATIONS } from '../core/equity/index.js';
 import { createRng } from '../core/rng.js';
 import { appendHistory, buildRoster } from '../store/schema.js';
 import { loadAll, saveState, saveHistory, type StorageLike } from '../store/persistence.js';
-import type { PersistedState, Pace, RosterSeat, SessionEndKind } from '../store/schema.js';
+import type { PersistedState, Pace, ChipUnit, RosterSeat, SessionEndKind } from '../store/schema.js';
 import type {
   ActionType,
   HandRecord,
@@ -79,6 +79,8 @@ export interface ControllerSnapshot {
   sessionEnd: SessionEnd | null;
   /** 节奏档位（只影响 AI 每步等待多久，不影响决策）。 */
   pace: Pace;
+  /** 筹码显示单位（只影响展示，不改变任何金额）。 */
+  chipUnit: ChipUnit;
 }
 
 type Listener = (s: ControllerSnapshot) => void;
@@ -214,6 +216,7 @@ export class GameController {
       pendingBusts: pendingBustsOf(this.persisted),
       sessionEnd: sessionEndOf(this.persisted),
       pace: this.persisted.pace,
+      chipUnit: this.persisted.chipUnit,
     };
   }
 
@@ -326,6 +329,27 @@ export class GameController {
     this.persisted.pace = pace;
     this.persistState();
     this.emit();
+  }
+
+  /**
+   * 切换筹码显示单位（阶段六）。
+   *
+   * 与 `setPace` 同一类：`chipUnit` 也不在冻结的 `Settings` 里，落在 `PersistedState`。
+   *
+   * **不触碰任何金额**：它只改「怎么显示」，`bankroll` / 手牌状态 / 历史 / 结算
+   * 全部保持筹码整数。因此这里刻意不重建桌子、不清空任何东西——用户在任何时候
+   * 切换都只看到数字换了写法（1000 ↔ 100 BB），牌局不受影响。
+   */
+  setChipUnit(unit: ChipUnit): void {
+    if (this.persisted.chipUnit === unit) return;
+    this.persisted.chipUnit = unit;
+    this.persistState();
+    this.emit();
+  }
+
+  /** 在两种单位间切换（快捷键用）。 */
+  toggleChipUnit(): void {
+    this.setChipUnit(this.persisted.chipUnit === 'bb' ? 'chips' : 'bb');
   }
 
   /**

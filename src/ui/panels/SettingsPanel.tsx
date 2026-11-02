@@ -10,7 +10,7 @@
 
 import { AI_TIER_LABELS, type AITier, type Settings } from '../../core/types.js';
 import { clampBigBlind, clampSmallBlind, clampStartingStack } from '../format.js';
-import type { Pace, RosterSeat } from '../../store/schema.js';
+import type { ChipUnit, Pace, RosterSeat } from '../../store/schema.js';
 
 /** 生效时机标签：这些项只在开新一手时读取。 */
 function NextHandTag() {
@@ -27,6 +27,8 @@ export function SettingsPanel({
   roster,
   pace,
   onPaceChange,
+  chipUnit,
+  onChipUnitChange,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
@@ -41,6 +43,9 @@ export function SettingsPanel({
   /** 节奏档位（阶段二 P1-1）：只影响 AI 每步等待多久，不影响决策。 */
   pace: Pace;
   onPaceChange: (p: Pace) => void;
+  /** 筹码显示单位（阶段六）：只影响展示，不改任何金额与结算。 */
+  chipUnit: ChipUnit;
+  onChipUnitChange: (u: ChipUnit) => void;
 }) {
   return (
     <div className="panel">
@@ -146,6 +151,27 @@ export function SettingsPanel({
         </select>
       </div>
 
+      {/* 筹码单位（阶段六）。与节奏档位同理：只改展示，立即生效，
+          因此也不挂「下一手生效」标签。 */}
+      <div className="settings-row">
+        <div className="label">
+          <span>筹码单位</span>
+          <span className="hint">
+            只影响数字的显示方式，不改变任何金额；立即生效。按{' '}
+            <kbd>B</kbd> 可随时快速切换。
+          </span>
+        </div>
+        <select
+          data-testid="chip-unit-select"
+          aria-label="筹码单位"
+          value={chipUnit}
+          onChange={(e) => onChipUnitChange(e.target.value === 'bb' ? 'bb' : 'chips')}
+        >
+          <option value="chips">真实筹码（1000）</option>
+          <option value="bb">大盲倍数（100 BB）</option>
+        </select>
+      </div>
+
       <div className="settings-row">
         <div className="label">
           <span>
@@ -206,7 +232,9 @@ export function SettingsPanel({
       <div className="settings-row">
         <div className="label">
           <span>显示快捷键提示</span>
-          <span className="hint">F 弃牌 / C 跟注 / R 加注 / Space 确认 / 长按 S 跳过等待</span>
+          <span className="hint">
+            F 弃牌 / C 跟注 / R 加注 / Space 确认 / B 切换筹码单位 / 长按 S 跳过等待
+          </span>
         </div>
         <input
           type="checkbox"

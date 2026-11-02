@@ -281,3 +281,55 @@ kbd {
   font-size: 11px;
 }
 
+
+/* ═══════════════════════════════════════════════════════════
+   阶段六：下注输入框与底池倍数刻度
+   ───────────────────────────────────────────────────────────
+   输入框与滑杆是同一件事的两个入口，因此视觉上必须「同高、同基线」：
+   早前只有滑杆时，`.row` 内是「加注到 + 滑杆」，滑杆自己 flex:1 撑满；
+   加入输入框后如果不约束宽度，滑杆会被挤到只剩几十像素，
+   拖动精度直接崩掉。这里给输入框固定宽度上限、让滑杆继续 flex:1。
+   ═══════════════════════════════════════════════════════════ */
+
+.raise-box .raise-input {
+  width: 96px;
+  min-width: 72px;
+  padding: 6px 8px;
+  font-family: var(--font-num);
+  font-variant-numeric: var(--mono-tabular);
+  font-size: 14px;
+  font-weight: 650;
+  text-align: right;
+  color: var(--gold);
+  background: var(--bg-0);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.raise-box .raise-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.raise-box .raise-unit {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 底池倍数：让玩家不必心算「这个数相当于几个池」。
+   用 --muted 而非金色——它是参照信息，不是要你决策的动作。 */
+.raise-box .raise-pot-multiple {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-family: var(--font-num);
+  font-variant-numeric: var(--mono-tabular);
+  color: var(--muted);
+}
+
+/* 桌面端横排仪表盘里，输入框那一行会与滑杆并排；
+   窄屏（移动端）时退回整行，避免输入框把滑杆压没。 */
+@media (max-width: 900px) {
+  .raise-box .raise-input {
+    width: 84px;
+  }
+}

@@ -14,6 +14,7 @@
 import { useMemo } from 'react';
 import { SeatView, type SeatShowcase } from './SeatView.js';
 import { CardRow } from './CardView.js';
+import { type ChipUnit, formatAmount, formatChips } from '../chipUnit.js';
 import type { ShowcaseView } from '../useTableShowcase.js';
 import { seatRoles } from '../../core/pot.js';
 import { STREET_LABELS, type HandState } from '../../core/types.js';
@@ -120,11 +121,20 @@ export function TableView({
   state,
   heroSeat,
   view,
+  chipUnit = 'chips',
 }: {
   state: HandState;
   heroSeat: number;
   /** 演出视图；不传则退化为「一次性呈现」。 */
   view?: ShowcaseView;
+  /**
+   * 筹码显示单位（阶段六）。
+   *
+   * 只影响**展示文本**：底池、座位筹码、本街投入。所有规则判定与结构化属性
+   * （`data-seat`、`data-seat-count`）都不随单位变化，因此切换单位不改变任何
+   * 对局结果；默认档 `chips` 下文本与改动前逐字符相同。
+   */
+  chipUnit?: ChipUnit;
 }) {
   const n = state.seatCount;
   const { smallBlindSeat, bigBlindSeat } = seatRoles(n, state.dealerSeat);
@@ -207,6 +217,7 @@ export function TableView({
           smallBlindSeat={smallBlindSeat}
           bigBlindSeat={bigBlindSeat}
           showcase={showcase}
+          chipUnit={chipUnit}
         />
       </div>
     );
@@ -257,14 +268,17 @@ export function TableView({
           <div
             className={`value ${lastAction ? 'sc-pulse' : ''}`}
             data-testid="pot-value"
+            /* 精确筹码值挂在 title：BB 档显示的是「30 BB」这类可读文本，
+               想核对具体筹码数时悬停即可，不必先切回筹码单位。 */
+            title={formatAmount(pot, 'chips', state.bigBlind)}
           >
-            {pot}
+            {formatChips(pot, chipUnit, state.bigBlind)}
           </div>
           {/* 底池变化此前只有视觉脉冲，读屏用户完全感知不到（审计无障碍项）。
               补一个常驻的 polite 播报区：它始终在 DOM 里（内容变化才会播报，
               若随内容一起挂载则首帧不会触发播报）。sr-only 绝对定位，不参与布局。 */}
           <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-            底池 {pot}
+            底池 {formatAmount(pot, chipUnit, state.bigBlind)}
           </span>
         </div>
         <div className="board" data-testid="board" data-revealed={shownBoard.length}>

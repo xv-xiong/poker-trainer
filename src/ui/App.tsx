@@ -22,6 +22,7 @@ import { useTableShowcase } from './useTableShowcase.js';
 import { useReplay } from './useReplay.js';
 import { ReplayPanel } from './components/ReplayPanel.js';
 import { stepAiAction } from './showcaseStep.js';
+import { formatAmount, formatChips } from './chipUnit.js';
 import { buildSessionSummary, handFeedback } from '../review/session.js';
 import './styles/tokens.css';
 import type { ActionType } from '../core/types.js';
@@ -233,14 +234,26 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entered]);
 
-  // 快捷键：N 开始下一手
+  // 快捷键：N 开始下一手、B 切换筹码 / BB
+  //
+  // 两条快捷键共用一个监听器而不是各注册一个：全局 keydown 越多，
+  // 「某个输入框里按键被吞掉/被误触发」的组合就越多，集中在一处更好审计。
+  //
+  // `B` **不受 `snap.state.finished` 约束**：玩家在结算画面、复盘前想核对
+  // BB 数也应能切换。它只改展示，任何时候切换都安全。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
+      // 输入框 / 下拉里按键一律让给控件本身：筹码输入框里打「b」是想打
+      // 「3.5bb」这类带单位的数字，绝不能把切换单位抢走。
       if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (e.repeat) return;
       if (e.key.toLowerCase() === 'n' && snap.state?.finished) {
         e.preventDefault();
         handleNextHand();
+      } else if (e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        controller.toggleChipUnit();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -397,13 +410,15 @@ export function App() {
           ))}
         </div>
 
-        <div className="bankroll">
+        <div className="bankroll" title={formatAmount(snap.bankroll, 'chips', snap.settings.bigBlind)}>
           <span className="muted small">资金</span>
-          <span className="amount">{snap.bankroll}</span>
+          <span className="amount">
+            {formatChips(snap.bankroll, snap.chipUnit, snap.settings.bigBlind)}
+          </span>
           {snap.lastRecord && (
             <span className={`delta ${lastHandNet >= 0 ? 'up' : 'down'}`}>
               {lastHandNet >= 0 ? '+' : ''}
-              {lastHandNet}
+              {formatChips(lastHandNet, snap.chipUnit, snap.settings.bigBlind)}
             </span>
           )}
         </div>
@@ -460,6 +475,7 @@ export function App() {
                 state={snap.state}
                 heroSeat={controller.heroSeat}
                 view={table.view}
+                chipUnit={snap.chipUnit}
               />
               {/* 继承模式的「座位账本」：把每个 AI 的当前筹码摆在牌桌下方。
                   下桌的 AI 用半透明 + 删除线保留在条带里，而不是直接从界面消失——
@@ -467,7 +483,7 @@ export function App() {
               {snap.carryOverStacks && snap.roster.length > 0 && (
                 <div className="roster-strip" data-testid="roster-strip">
                   <span className="roster-me">
-                    你 <b>{snap.bankroll}</b>
+                    你 <b>{formatChips(snap.bankroll, snap.chipUnit, snap.settings.bigBlind)}</b>
                   </span>
                   {snap.roster.map((r) => (
                     <span
@@ -475,9 +491,18 @@ export function App() {
                       className={`roster-seat${r.out ? ' out' : ''}`}
                       data-testid={`roster-${r.id}`}
                       data-out={r.out ? '1' : '0'}
-                      title={r.out ? `${r.name} 已输光下桌` : `${r.name} 当前筹码 ${r.stack}`}
+                      title={
+                        r.out
+                          ? `${r.name} 已输光下桌`
+                          : `${r.name} 当前筹码 ${formatAmount(r.stack, 'chips', snap.settings.bigBlind)}`
+                      }
                     >
-                      {r.name} <b>{r.out ? '已下桌' : r.stack}</b>
+                      {r.name}{' '}
+                      <b>
+                        {r.out
+                          ? '已下桌'
+                          : formatChips(r.stack, snap.chipUnit, snap.settings.bigBlind)}
+                      </b>
                     </span>
                   ))}
                 </div>
@@ -494,6 +519,7 @@ export function App() {
                 hint={snap.hint}
                 hintLoading={hintLoading}
                 showShortcuts={snap.settings.showShortcuts}
+                chipUnit={snap.chipUnit}
                 onAct={handleAct}
                 onHint={handleHint}
                 onNextHand={handleNextHand}
@@ -509,9 +535,12 @@ export function App() {
                   <div className="stats-grid">
                     <div className="stat">
                       <div className="k">你的净盈亏</div>
-                      <div className={`v ${lastHandNet >= 0 ? 'pos' : 'neg'}`}>
+                      <div
+                        className={`v ${lastHandNet >= 0 ? 'pos' : 'neg'}`}
+                        title={formatAmount(lastHandNet, 'chips', snap.settings.bigBlind)}
+                      >
                         {lastHandNet >= 0 ? '+' : ''}
-                        {lastHandNet}
+                        {formatChips(Math.abs(lastHandNet), snap.chipUnit, snap.settings.bigBlind)}
                       </div>
                     </div>
                     <div className="stat">
@@ -522,7 +551,13 @@ export function App() {
                     </div>
                     <div className="stat">
                       <div className="k">底池</div>
-                      <div className="v">{snap.state.pots.reduce((a, p) => a + p.amount, 0)}</div>
+                      <div className="v">
+                        {formatChips(
+                          snap.state.pots.reduce((a, p) => a + p.amount, 0),
+                          snap.chipUnit,
+                          snap.settings.bigBlind,
+                        )}
+                      </div>
                     </div>
                     <div className="stat">
                       <div className="k">底池层数</div>
@@ -581,7 +616,12 @@ export function App() {
                                   <span className="tag">边池 {line.layerIndex}</span>
                                 )}
                               </td>
-                              <td className="num">{line.amount}</td>
+                              <td
+                                className="num"
+                                title={formatAmount(line.amount, 'chips', snap.settings.bigBlind)}
+                              >
+                                {formatChips(line.amount, snap.chipUnit, snap.settings.bigBlind)}
+                              </td>
                               <td>{line.recipients.map(seatLabelOf).join('、') || '—'}</td>
                             </tr>
                           ))}
@@ -649,6 +689,8 @@ export function App() {
             roster={snap.roster}
             pace={snap.pace}
             onPaceChange={(p) => controller.setPace(p)}
+            chipUnit={snap.chipUnit}
+            onChipUnitChange={(u) => controller.setChipUnit(u)}
           />
         </div>
       )}

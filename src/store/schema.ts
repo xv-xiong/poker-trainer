@@ -19,6 +19,10 @@ import { defaultSettings, emptyStats } from '../core/types.js';
  * 读盘时缺省（`migrateState` 尾部统一规整），不构成破坏性变更，
  * 旧存档无需迁移、新代码读旧档也不会失败。递增版本号反而会让所有旧存档
  * 走一次没有必要的迁移提示。
+ *
+ * 阶段六（筹码单位）同理新增 `chipUnit`：同样是可选字段 + 尾部规整。
+ * 它只影响**展示**（牌桌数字、底池、加注额），不参与任何规则或结算计算，
+ * 因此缺省时回退到「真实筹码」即可，没有任何数据需要迁移。
  */
 export const SCHEMA_VERSION = 2;
 
@@ -47,6 +51,29 @@ export const DEFAULT_PACE: Pace = 'realistic';
  */
 export function normalizePace(raw: unknown): Pace {
   return raw === 'realistic' || raw === 'fast' || raw === 'instant' ? raw : DEFAULT_PACE;
+}
+
+/**
+ * 筹码显示单位（阶段六）：`chips` 显示真实筹码，`bb` 显示大盲倍数。
+ *
+ * 与 `Pace` 一样属于**用户设置**，要落盘跨会话保留，所以类型定义在 store。
+ * `src/ui/chipUnit.ts` 只 `import type` 它来格式化，反向依赖会破坏分层。
+ *
+ * 只影响展示：金额、结算、持久化全部仍以筹码整数为权威值。
+ */
+export type ChipUnit = 'chips' | 'bb';
+
+/** 默认显示真实筹码——与阶段六之前的观感一致，老用户不会被突然换成 BB。 */
+export const DEFAULT_CHIP_UNIT: ChipUnit = 'chips';
+
+/**
+ * 把任意值规整成合法单位；非法值静默回退默认。
+ *
+ * 与 `normalizePace` 同一个理由：单位是纯展示字段，判「存档损坏」会触发
+ * 归档 + 重建，为一个小字段丢掉资金和历史不划算。
+ */
+export function normalizeChipUnit(raw: unknown): ChipUnit {
+  return raw === 'bb' ? 'bb' : DEFAULT_CHIP_UNIT;
 }
 
 export const STORAGE_KEYS = {
@@ -117,6 +144,11 @@ export interface PersistedState {
    * 尾部统一补默认值，因此 `loadAll` 之后它必然合法。
    */
   pace: Pace;
+  /**
+   * 筹码显示单位（只影响展示）。与 `pace` 一样，类型上非可选但**读盘时可能缺失**，
+   * 由 `migrateState` 尾部统一规整，因此 `loadAll` 之后必然合法。
+   */
+  chipUnit: ChipUnit;
 }
 
 /** 构造一副全新的 AI 座位账本（全部为满筹码、未下桌）。 */
@@ -141,6 +173,7 @@ export function initialState(settings?: Partial<Settings>): PersistedState {
     roster: [],
     heroOut: false,
     pace: DEFAULT_PACE,
+    chipUnit: DEFAULT_CHIP_UNIT,
   };
 }
 
@@ -280,7 +313,7 @@ export const MIGRATIONS: Record<number, Migration> = {
 /**
  * 把任意版本的状态迁移到当前版本。失败返回 null。
  *
- * 尾部对 `pace` 做**无条件规整**（不是迁移步骤）：`pace` 是阶段二新增的可选字段，
+ * 尾部对 `pace` / `chipUnit` 做**无条件规整**（不是迁移步骤）：两者都是后加的可选字段，
  * 既可能出现在「v1 迁移上来」的数据里，也可能出现在「手工改过 / 更早期 v2 存档」
  * 里。放在这里的好处是**只有一个收敛点**——`loadAll` 无论走哪条分支都要经过
  * `migrateState`，因此下游（controller / snapshot）拿到的 `pace` 必然合法，
@@ -297,7 +330,7 @@ export function migrateState(raw: Record<string, unknown>): Record<string, unkno
     if (!next) return null;
     cur = next;
   }
-  return { ...cur, pace: normalizePace(cur.pace) };
+  return { ...cur, pace: normalizePace(cur.pace), chipUnit: normalizeChipUnit(cur.chipUnit) };
 }
 
 /** 构造一条历史记录。 */

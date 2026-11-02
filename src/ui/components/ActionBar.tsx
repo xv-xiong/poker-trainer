@@ -1,5 +1,5 @@
 /**
- * 操作区：动作按钮、加注滑杆与快捷尺度、提示面板、快捷键提示。
+ * 操作区：动作按钮、加注滑杆与快捷尺度、下注输入框、提示面板、快捷键提示。
  *
  * 演出接入（task-4）：
  *   - `heroTurnActive`：把「演出中的禁用」（AI 思考中 / 公共牌还没发完 /
@@ -15,15 +15,51 @@
  *   每次加确认会显著拖慢练习节奏，因此不加）。实现方式是**同一个按钮二次点击**，
  *   而不是弹窗：弹窗会打断键盘流，也会在移动端遮住牌桌。3 秒内不确认则自动复位，
  *   避免「以为没点上、其实已经进入确认态」的歧义。
+ *
+ * 阶段六（滑杆自适应 / 下注输入框 / 筹码单位）：
+ *   1. **滑杆步长自适应**：早先固定 `step={bigBlind}`。当加注区间不是大盲的整数倍
+ *      （例如全下额 11、大盲 10，区间 [20, 11] 被夹成 [11, 11]）时，滑杆会出现
+ *      「拖到底也到不了最大值」的现象。改成按区间宽度选步长：能整除就按
+ *      `bigBlind`，否则退化到 1 与区间宽度的最大公约数级别，保证两端都可达。
+ *   2. **底池倍数刻度**：滑杆下方给「0.5× / 1× / 2× 池」三个位置标记，
+ *      并把当前值换算成「约 N× 池」——牌桌决策的真实依据是底池倍数，
+ *      而不是绝对筹码数。
+ *   3. **下注输入框**：与滑杆双向同步。输入过程中**不做即时夹取**（否则用户
+ *      想打「1200」会在敲完「1」的瞬间被夹成最小值，后面两个 0 再也打不进去），
+ *      只在失焦 / 回车 / 点快捷尺度时统一 `clampRaiseTo`。
+ *   4. **筹码单位**：所有金额走 `formatChips` / `formatAmount`。单位只影响展示，
+ *      `onAct` 送出的永远是筹码整数。
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ACTION_LABELS, type ActionType } from '../../core/types.js';
 import type { LegalActions } from '../../core/betting.js';
+import {
+  type ChipUnit,
+  clampRaiseTo,
+  formatAmount,
+  formatChips,
+  parseChipInput,
+} from '../chipUnit.js';
 import '../styles/actionbar.css';
 
 /** 全下确认态的有效时长（毫秒）。超时自动复位，防止误判「卡在确认态」。 */
 const ALLIN_CONFIRM_MS = 3000;
+
+/**
+ * 滑杆步长恒为 1。
+ *
+ * 早先固定用 `bigBlind`，并曾试图「区间能被大盲整除就按大盲、否则退到 1」，
+ * 两者都有同一个病根：**滑杆会成为第二个真相源**。
+ *
+ * 具体表现（实测）：`min=30 / step=10 / max=1000` 时，下注输入框里打 `515`
+ * 是完全合法的加注额，但 HTML range 只接受 `min + k*step`，525 不在格点上 →
+ * 浏览器把它吸附到 520。于是同一时刻「输入框 + 加注按钮」是 515、
+ * 「滑杆」是 520，用户看到一个自己没输入过的数字；再拖一下滑杆，515 就真的
+ * 丢了。步长 1 让滑杆能表示任意整数筹码（规则层允许的最小粒度），
+ * 「一档一个大盲」的手感改由快捷尺度按钮承担（1/2 池、2/3 池、满池、全下）。
+ */
+export const SLIDER_STEP = 1;
 
 export function ActionBar({
   legal,
@@ -41,6 +77,7 @@ export function ActionBar({
   waiting = false,
   waitingLabel = '对手正在行动（AI 思考中）…',
   settleHold = false,
+  chipUnit = 'chips',
 }: {
   legal: LegalActions | null;
   pot: number;
@@ -60,6 +97,8 @@ export function ActionBar({
   waitingLabel?: string;
   /** 本手是否已结束但仍在结算停顿中（此时不显示「下一手」，避免连点）。 */
   settleHold?: boolean;
+  /** 筹码显示单位（只影响展示）。 */
+  chipUnit?: ChipUnit;
 }) {
   const canAct = heroTurnActive ?? heroTurn;
   const minRaise = legal?.minRaiseTo ?? 0;
@@ -67,12 +106,23 @@ export function ActionBar({
   const [raiseTo, setRaiseTo] = useState(minRaise);
   /** 全下是否已进入「待确认」状态（再点一次才真正执行）。 */
   const [allinArmed, setAllinArmed] = useState(false);
+  /**
+   * 输入框的原始文本。
+   *
+   * 为什么不直接把 `raiseTo` 回读给输入框：`raiseTo` 是**已夹取**的整数，
+   * 用户在输入框里打「1」「12」「120」的过程中，回读会让光标位置与文本不断被
+   * 外部覆盖（打字打到一半被改成别的数）。因此输入框自己有草稿态，失焦/回车
+   * 才提交；滑杆与快捷尺度改动时，草稿跟着重置。
+   */
+  const [draft, setDraft] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setRaiseTo(minRaise);
     // 行动权或可加注区间变化（含换街、换手、轮到别人）时，确认态一律复位：
     // 否则上一手残留的「确认中」会让下一次全下变成单击即执行。
     setAllinArmed(false);
+    setDraft(null);
   }, [minRaise, maxRaise, canAct]);
 
   // 确认态超时复位
@@ -81,6 +131,20 @@ export function ActionBar({
     const t = setTimeout(() => setAllinArmed(false), ALLIN_CONFIRM_MS);
     return () => clearTimeout(t);
   }, [allinArmed]);
+
+  /**
+   * 提交加注额：夹进合法区间，同步滑杆并清掉草稿。
+   *
+   * 所有「用户输入了一个具体数字」的路径都走这里，保证只有一处夹取逻辑，
+   * 滑杆、输入框、快捷尺度不会各自算出不同的值。
+   */
+  const commitRaiseTo = (value: number) => {
+    const next = clampRaiseTo(value, minRaise, maxRaise);
+    setRaiseTo(next);
+    setDraft(null);
+    return next;
+  };
+
 
   const quickSizes = useMemo(() => {
     if (!legal?.canRaise) return [];
@@ -98,6 +162,18 @@ export function ActionBar({
       }))
       .filter((s, i, arr) => arr.findIndex((x) => x.value === s.value) === i);
   }, [legal, pot, minRaise, maxRaise]);
+
+  /**
+   * 当前加注额相当于底池的多少倍（含「先跟注再加注」的口径）。
+   *
+   * 用 `raiseTo` 而不是「加注部分」：牌桌上说「下注一个底池」指的是总额
+   * （call + raise），而玩家心里的锚点也是总额。
+   */
+  const potMultiple = useMemo(() => {
+    const base = pot + (legal?.callAmount ?? 0);
+    if (base <= 0) return 0;
+    return raiseTo / base;
+  }, [raiseTo, pot, legal]);
 
   // 快捷键（桌面端）
   // 依赖里必须带 `canAct`：演出期间（canAct=false）不得响应任何动作快捷键，
@@ -173,7 +249,7 @@ export function ActionBar({
   const canRaise = legal?.canRaise ?? false;
   const callLabel = legal?.canCheck
     ? `${ACTION_LABELS.check.zh}（Check）`
-    : `${ACTION_LABELS.call.zh}（Call） ${legal?.callAmount ?? 0}`;
+    : `${ACTION_LABELS.call.zh}（Call） ${formatChips(legal?.callAmount ?? 0, chipUnit, bigBlind)}`;
 
   /**
    * 全下点击：第一次只进入确认态，第二次才真正执行。
@@ -210,30 +286,72 @@ export function ActionBar({
         <div className="raise-box">
           <div className="row">
             <span className="muted small">加注到</span>
-            <span className="amount">{raiseTo}</span>
+            {/* 下注输入框：与滑杆双向同步。
+                用 type="text" + inputMode="decimal" 而不是 type="number"：
+                number 在中文输入法下会被吞掉小数点，且滚轮/上下键会误改数值。 */}
+            <input
+              ref={inputRef}
+              className="raise-input"
+              type="text"
+              inputMode="decimal"
+              data-testid="raise-input"
+              aria-label={`加注额度（${chipUnit === 'bb' ? '大盲倍数' : '筹码'}）`}
+              value={draft ?? formatChips(raiseTo, chipUnit, bigBlind)}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={(e) => {
+                const parsed = parseChipInput(e.target.value, chipUnit, bigBlind);
+                if (parsed === null) setDraft(null); // 无法解析 → 恢复显示当前值
+                else commitRaiseTo(parsed);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const parsed = parseChipInput(e.currentTarget.value, chipUnit, bigBlind);
+                  if (parsed === null) setDraft(null);
+                  else commitRaiseTo(parsed);
+                  inputRef.current?.blur();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setDraft(null);
+                  inputRef.current?.blur();
+                }
+              }}
+            />
+            <span className="muted small raise-unit">{chipUnit === 'bb' ? 'BB' : '筹码'}</span>
+            {/* 底池倍数：牌桌决策的真实锚点是「下多少池」，不是绝对筹码 */}
+            <span className="muted small raise-pot-multiple" data-testid="raise-pot-multiple">
+              约 {potMultiple.toFixed(2)}× 池
+            </span>
           </div>
           <input
             type="range"
             min={minRaise}
             max={maxRaise}
-            step={bigBlind}
+            step={SLIDER_STEP}
             value={raiseTo}
             aria-label="加注额度"
             /* 读屏只念数字时听不出这是「加注到」还是「筹码数」，
                补上语义 + BB 对照（WCAG 2.2 · 1.3.1 / 4.1.2）。 */
-            aria-valuetext={`加注到 ${raiseTo}（约 ${(raiseTo / Math.max(1, bigBlind)).toFixed(1)} BB）`}
-            onChange={(e) => setRaiseTo(Number(e.target.value))}
+            aria-valuetext={`加注到 ${formatAmount(raiseTo, chipUnit, bigBlind)}（约 ${(
+              raiseTo / Math.max(1, bigBlind)
+            ).toFixed(1)} BB）`}
+            onChange={(e) => commitRaiseTo(Number(e.target.value))}
           />
           <div className="quick-sizes">
             {quickSizes.map((s) => (
-              <button key={s.label} onClick={() => setRaiseTo(s.value)}>
+              <button
+                key={s.label}
+                onClick={() => commitRaiseTo(s.value)}
+                /* 悬停给出精确筹码值：快捷尺度的标签是比例，玩家仍想知道具体数字 */
+                title={formatAmount(s.value, chipUnit, bigBlind)}
+              >
                 {s.label}
               </button>
             ))}
           </div>
           <div className="action-row">
             <button className="primary" onClick={() => onAct('raise', raiseTo)}>
-              加注（Raise）
+              {`加注（Raise） ${formatChips(raiseTo, chipUnit, bigBlind)}`}
             </button>
             <button
               className={allinArmed ? 'danger' : undefined}
@@ -297,6 +415,9 @@ export function ActionBar({
           </span>
           <span>
             <kbd>Space</kbd> 确认加注
+          </span>
+          <span>
+            <kbd>B</kbd> 切换筹码/BB
           </span>
         </div>
       )}
