@@ -11,7 +11,8 @@ import { CardView } from './CardView.js';
 import { ActionBubble, ThinkingBubble } from './ActionBubble.js';
 import type { ActionRecord } from '../../core/types.js';
 import { AI_TIER_LABELS, type HandState, type Seat } from '../../core/types.js';
-import { type ChipUnit, formatAmount, formatChips } from '../chipUnit.js';
+import { type ChipUnit, formatAmount } from '../chipUnit.js';
+import { ChipAmount } from './ChipAmount.js';
 
 /** 该座位本街投入是否刚刚变化过（用于数字强调动画）。 */
 export interface SeatShowcase {
@@ -96,7 +97,7 @@ export function SeatView({
             刻意不加 `data-testid`：既有 E2E 与单测都用 `.stack` 的文本，
             默认档下文本与改动前逐字符相同。 */}
         <span className="stack" title={formatAmount(seat.stack, 'chips', state.bigBlind)}>
-          {formatChips(seat.stack, chipUnit, state.bigBlind)}
+          <ChipAmount chips={seat.stack} unit={chipUnit} bigBlind={state.bigBlind} />
         </span>
       </div>
 
@@ -132,7 +133,8 @@ export function SeatView({
           data-testid="committed"
           title={formatAmount(seat.committedThisStreet, 'chips', state.bigBlind)}
         >
-          本街投入 {formatChips(seat.committedThisStreet, chipUnit, state.bigBlind)}
+          本街投入{' '}
+          <ChipAmount chips={seat.committedThisStreet} unit={chipUnit} bigBlind={state.bigBlind} />
         </div>
       )}
     </div>

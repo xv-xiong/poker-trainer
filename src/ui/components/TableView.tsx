@@ -14,7 +14,8 @@
 import { useMemo } from 'react';
 import { SeatView, type SeatShowcase } from './SeatView.js';
 import { CardRow } from './CardView.js';
-import { type ChipUnit, formatAmount, formatChips } from '../chipUnit.js';
+import { type ChipUnit, formatAmount } from '../chipUnit.js';
+import { ChipAmount } from './ChipAmount.js';
 import type { ShowcaseView } from '../useTableShowcase.js';
 import { seatRoles } from '../../core/pot.js';
 import { STREET_LABELS, type HandState } from '../../core/types.js';
@@ -272,7 +273,7 @@ export function TableView({
                想核对具体筹码数时悬停即可，不必先切回筹码单位。 */
             title={formatAmount(pot, 'chips', state.bigBlind)}
           >
-            {formatChips(pot, chipUnit, state.bigBlind)}
+            <ChipAmount chips={pot} unit={chipUnit} bigBlind={state.bigBlind} />
           </div>
           {/* 底池变化此前只有视觉脉冲，读屏用户完全感知不到（审计无障碍项）。
               补一个常驻的 polite 播报区：它始终在 DOM 里（内容变化才会播报，

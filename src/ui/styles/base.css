@@ -200,3 +200,33 @@ select:focus {
   color: var(--danger);
 }
 
+/* ── BB 单位后缀（阶段六补丁） ─────────────────────────────────────────
+   `ChipAmount` 组件在 BB 档渲染 `<span class="unit-bb">BB</span>`。
+   单独给它写样式，而不是把「BB」拼进数字文本，原因有三：
+
+   1. **别抢数字的注意力**。牌桌上要扫读的是数值，单位是「确认信息」。
+      0.72em + 降透明度后，眼睛停在「99」上，需要核对时再看「BB」。
+   2. **不撑破座位**。座位筹码只有 13.5px、座位宽度本身很紧，
+      同字号的「 BB」在九人桌窄槽里会把 `.seat-head` 顶成两行。
+   3. **字号自适应**。全用 `em` / 相对色，挂到 24px 的底池、19px 的资金、
+      13.5px 的座位筹码上都自动协调，不需要为每处各写一遍。
+
+   `white-space: nowrap` + `margin-left` 用 `0.35em`：
+   数字与单位之间不留空格字符（避免 `textContent` 里出现多余空白影响
+   既有断言），靠 margin 获得视觉间隔。
+   ─────────────────────────────────────────────────────────────────── */
+.unit-bb {
+  font-size: 0.72em;
+  font-weight: 500;
+  margin-left: 0.35em;
+  letter-spacing: 0.02em;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+/* 结算明细表的金额列是右对齐的等宽数字，单位后缀浮在数字右侧时
+   会把列撑宽 1 个字符，因此这里收得更紧一点。 */
+.settlement-table .num .unit-bb {
+  font-size: 0.68em;
+  margin-left: 0.25em;
+}

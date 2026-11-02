@@ -41,6 +41,7 @@ import {
   formatChips,
   parseChipInput,
 } from '../chipUnit.js';
+import { ChipAmount } from './ChipAmount.js';
 import '../styles/actionbar.css';
 
 /** 全下确认态的有效时长（毫秒）。超时自动复位，防止误判「卡在确认态」。 */
@@ -247,9 +248,21 @@ export function ActionBar({
   }
 
   const canRaise = legal?.canRaise ?? false;
-  const callLabel = legal?.canCheck
-    ? `${ACTION_LABELS.check.zh}（Check）`
-    : `${ACTION_LABELS.call.zh}（Call） ${formatChips(legal?.callAmount ?? 0, chipUnit, bigBlind)}`;
+  /**
+   * 跟注按钮的文案。
+   *
+   * BB 档下必须带单位（「跟注（Call） 2 BB」而不是「跟注（Call） 2」）：
+   * 这是**要花钱的动作**，看不出单位就等于看不出要付多少。筹码档保持纯数字。
+   * 因为要混排 JSX 元素，这里返回 ReactNode 而不是字符串。
+   */
+  const callLabel = legal?.canCheck ? (
+    `${ACTION_LABELS.check.zh}（Check）`
+  ) : (
+    <>
+      {ACTION_LABELS.call.zh}（Call）{' '}
+      <ChipAmount chips={legal?.callAmount ?? 0} unit={chipUnit} bigBlind={bigBlind} />
+    </>
+  );
 
   /**
    * 全下点击：第一次只进入确认态，第二次才真正执行。
@@ -351,7 +364,7 @@ export function ActionBar({
           </div>
           <div className="action-row">
             <button className="primary" onClick={() => onAct('raise', raiseTo)}>
-              {`加注（Raise） ${formatChips(raiseTo, chipUnit, bigBlind)}`}
+              加注（Raise） <ChipAmount chips={raiseTo} unit={chipUnit} bigBlind={bigBlind} />
             </button>
             <button
               className={allinArmed ? 'danger' : undefined}

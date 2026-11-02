@@ -11,6 +11,7 @@ import { createMemoryStorage, type StorageLike } from '../store/persistence.js';
 import { settlementBreakdown, type SettlementLine } from '../core/showdown.js';
 import { TableView } from './components/TableView.js';
 import { ActionBar } from './components/ActionBar.js';
+import { ChipAmount } from './components/ChipAmount.js';
 import { RebuyDialog } from './components/RebuyDialog.js';
 import { SessionEndPanel } from './components/SessionEndPanel.js';
 import { ReviewPanel } from './panels/ReviewPanel.js';
@@ -22,7 +23,7 @@ import { useTableShowcase } from './useTableShowcase.js';
 import { useReplay } from './useReplay.js';
 import { ReplayPanel } from './components/ReplayPanel.js';
 import { stepAiAction } from './showcaseStep.js';
-import { formatAmount, formatChips } from './chipUnit.js';
+import { formatAmount } from './chipUnit.js';
 import { buildSessionSummary, handFeedback } from '../review/session.js';
 import './styles/tokens.css';
 import type { ActionType } from '../core/types.js';
@@ -413,12 +414,20 @@ export function App() {
         <div className="bankroll" title={formatAmount(snap.bankroll, 'chips', snap.settings.bigBlind)}>
           <span className="muted small">资金</span>
           <span className="amount">
-            {formatChips(snap.bankroll, snap.chipUnit, snap.settings.bigBlind)}
+            <ChipAmount
+              chips={snap.bankroll}
+              unit={snap.chipUnit}
+              bigBlind={snap.settings.bigBlind}
+            />
           </span>
           {snap.lastRecord && (
             <span className={`delta ${lastHandNet >= 0 ? 'up' : 'down'}`}>
               {lastHandNet >= 0 ? '+' : ''}
-              {formatChips(lastHandNet, snap.chipUnit, snap.settings.bigBlind)}
+              <ChipAmount
+                chips={lastHandNet}
+                unit={snap.chipUnit}
+                bigBlind={snap.settings.bigBlind}
+              />
             </span>
           )}
         </div>
@@ -483,7 +492,14 @@ export function App() {
               {snap.carryOverStacks && snap.roster.length > 0 && (
                 <div className="roster-strip" data-testid="roster-strip">
                   <span className="roster-me">
-                    你 <b>{formatChips(snap.bankroll, snap.chipUnit, snap.settings.bigBlind)}</b>
+                    你{' '}
+                    <b>
+                      <ChipAmount
+                        chips={snap.bankroll}
+                        unit={snap.chipUnit}
+                        bigBlind={snap.settings.bigBlind}
+                      />
+                    </b>
                   </span>
                   {snap.roster.map((r) => (
                     <span
@@ -499,9 +515,15 @@ export function App() {
                     >
                       {r.name}{' '}
                       <b>
-                        {r.out
-                          ? '已下桌'
-                          : formatChips(r.stack, snap.chipUnit, snap.settings.bigBlind)}
+                        {r.out ? (
+                          '已下桌'
+                        ) : (
+                          <ChipAmount
+                            chips={r.stack}
+                            unit={snap.chipUnit}
+                            bigBlind={snap.settings.bigBlind}
+                          />
+                        )}
                       </b>
                     </span>
                   ))}
@@ -540,7 +562,11 @@ export function App() {
                         title={formatAmount(lastHandNet, 'chips', snap.settings.bigBlind)}
                       >
                         {lastHandNet >= 0 ? '+' : ''}
-                        {formatChips(Math.abs(lastHandNet), snap.chipUnit, snap.settings.bigBlind)}
+                        <ChipAmount
+                          chips={Math.abs(lastHandNet)}
+                          unit={snap.chipUnit}
+                          bigBlind={snap.settings.bigBlind}
+                        />
                       </div>
                     </div>
                     <div className="stat">
@@ -552,11 +578,11 @@ export function App() {
                     <div className="stat">
                       <div className="k">底池</div>
                       <div className="v">
-                        {formatChips(
-                          snap.state.pots.reduce((a, p) => a + p.amount, 0),
-                          snap.chipUnit,
-                          snap.settings.bigBlind,
-                        )}
+                        <ChipAmount
+                          chips={snap.state.pots.reduce((a, p) => a + p.amount, 0)}
+                          unit={snap.chipUnit}
+                          bigBlind={snap.settings.bigBlind}
+                        />
                       </div>
                     </div>
                     <div className="stat">
@@ -620,7 +646,11 @@ export function App() {
                                 className="num"
                                 title={formatAmount(line.amount, 'chips', snap.settings.bigBlind)}
                               >
-                                {formatChips(line.amount, snap.chipUnit, snap.settings.bigBlind)}
+                                <ChipAmount
+                                  chips={line.amount}
+                                  unit={snap.chipUnit}
+                                  bigBlind={snap.settings.bigBlind}
+                                />
                               </td>
                               <td>{line.recipients.map(seatLabelOf).join('、') || '—'}</td>
                             </tr>

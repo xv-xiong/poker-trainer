@@ -33,8 +33,21 @@ async function waitHeroTurn(page: Page, timeoutMs = 60_000) {
   await page.waitForSelector('[data-testid="action-my-turn"]', { timeout: timeoutMs });
 }
 
-/** 读顶栏资金文本。 */
+/**
+ * 读顶栏资金文本，**剥掉单位后缀**。
+ *
+ * BB 档下顶栏渲染成 `100` + `<span class="unit-bb">BB</span>`，
+ * `innerText` 给出的是 `100BB`（单位是独立元素，视觉间隔靠 CSS margin，
+ * 文本里没有空格）。这里统一剥掉后缀，得到纯数值文本，
+ * 断言才能继续用 `Number()` 比对；单位本身是否渲染由专门的一条用例守着。
+ */
 async function bankrollText(page: Page): Promise<string> {
+  const raw = (await page.locator('.bankroll .amount').innerText()).trim();
+  return raw.replace(/\s*BB$/i, '').trim();
+}
+
+/** 读顶栏资金**原始**文本（含单位后缀），用于断言「BB 档必须带 BB」。 */
+async function bankrollRawText(page: Page): Promise<string> {
   return (await page.locator('.bankroll .amount').innerText()).trim();
 }
 
@@ -59,6 +72,10 @@ test.describe('阶段六：筹码单位与下注输入', () => {
     // 切到 BB 档
     await page.keyboard.press('b');
     await expect.poll(async () => bankrollText(page), { timeout: 5_000 }).not.toBe(chipsBefore);
+
+    // BB 档必须在数字后带上 BB 单位，否则「99」到底是筹码还是大盲分不清
+    const rawBB = await bankrollRawText(page);
+    expect(rawBB, `BB 档的资金必须带单位后缀，实际是「${rawBB}」`).toMatch(/BB$/);
 
     const bbText = await bankrollText(page);
     // 1000 筹码 / 10 大盲 = 100 BB
@@ -182,6 +199,76 @@ test.describe('阶段六：筹码单位与下注输入', () => {
     await input.fill(`${chips}c`);
     await input.press('Enter');
     await expect(range).toHaveValue(String(chips));
+  });
+
+  test('BB 档下牌桌每一处金额都带 BB 单位，筹码档不带', async ({ page }) => {
+    await enterTable(page);
+    await waitHeroTurn(page);
+
+    // 筹码档：底池与座位筹码都是纯数字，不能出现任何单位字样
+    const potChips = (await page.getByTestId('pot-value').innerText()).trim();
+    expect(potChips).toMatch(/^\d+$/);
+    const stackChips = (await page.locator('.seat .stack').first().innerText()).trim();
+    expect(stackChips).toMatch(/^\d+$/);
+
+    // 切到 BB 档
+    await page.keyboard.press('b');
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () => JSON.parse(localStorage.getItem('poker-trainer:state') ?? '{}').chipUnit,
+          ),
+        { timeout: 5_000 },
+      )
+      .toBe('bb');
+
+    /**
+     * 判据：所有可见金额的文本都必须以 `BB` 结尾。
+     *
+     * 覆盖用户能看到的全部位置：底池、各座位筹码、本街投入、
+     * 跟注按钮、加注按钮。任何一处漏了单位，用户就会在牌桌上
+     * 遇到「这个 5 是 5 筹码还是 5 个大盲」的歧义。
+     */
+    const amounts = await page.evaluate(() => {
+      const texts: { where: string; text: string }[] = [];
+      const push = (where: string, el: Element | null) => {
+        if (!el) return;
+        const text = (el as HTMLElement).innerText.trim();
+        if (text) texts.push({ where, text });
+      };
+      push('底池', document.querySelector('[data-testid="pot-value"]'));
+      document.querySelectorAll('.seat .stack').forEach((el, i) => push(`座位${i}筹码`, el));
+      document.querySelectorAll('[data-testid="committed"]').forEach((el, i) => {
+        // 「本街投入 3 BB」——只取数字与单位部分
+        const text = (el as HTMLElement).innerText.replace(/^\s*本街投入\s*/, '').trim();
+        if (text) texts.push({ where: `本街投入${i}`, text });
+      });
+      const buttons = Array.from(document.querySelectorAll('.action-row button'));
+      buttons.forEach((el, i) => {
+        const text = (el as HTMLElement).innerText.trim();
+        // 只挑带金额的按钮（跟注 / 加注）；弃牌没有金额
+        if (/跟注|Call|加注|Raise/.test(text) && /\d/.test(text)) {
+          texts.push({ where: `按钮${i}`, text });
+        }
+      });
+      return texts;
+    });
+
+    expect(amounts.length, 'BB 档下必须能在牌桌上找到金额').toBeGreaterThan(0);
+    for (const { where, text } of amounts) {
+      expect(text, `${where} 在 BB 档下必须带 BB 单位，实际是「${text}」`).toMatch(/BB/);
+    }
+
+    // 切回筹码档后，这些单位必须消失（不能残留）
+    await page.keyboard.press('b');
+    await expect
+      .poll(
+        async () =>
+          (await page.getByTestId('pot-value').innerText()).trim(),
+        { timeout: 5_000 },
+      )
+      .not.toMatch(/BB/);
   });
 
   test('滑杆能精确表示任意整数加注额（不会吸附到别的值）', async ({ page }) => {
