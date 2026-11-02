@@ -43,8 +43,8 @@
     "verify": "node scripts/verify-all.mjs"
   },
   "dependencies": {
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@playwright/test": "1.62.0",
